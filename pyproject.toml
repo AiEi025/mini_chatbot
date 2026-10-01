@@ -1,0 +1,24 @@
+[project]
+name = "mini-chatbot"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "AiEi025", email = "ehsaniamiali025@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "deepagents>=0.7.21",
+    "langchain>=1.4.3",
+    "langchain-core>=1.6.6",
+    "langchain-openai>=1.6.7",
+    "langgraph>=1.2.12",
+    "streamlit>=1.64.0",
+]
+
+[project.scripts]
+mini-chatbot = "mini_chatbot:main"
+
+[build-system]
+requires = ["uv_build>=0.12.7,<0.13.0"]
+build-backend = "uv_build"
