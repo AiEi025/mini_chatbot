@@ -1,22 +1,24 @@
-# this page related to streamlit 
+import asyncio
+import sys
+from pathlib import Path
 
-# in this section we need to built a chat bot 
-# that can gave file for RAG
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import streamlit as st
 
-from tools import rag
+from file_manager.file_manager import File_Manager
+
+file_manager = File_Manager()
 
 # try:
-upload_file = st.file_uploader(label='Upload',max_upload_size = 20 ,type=["txt", "pdf","md"])
+upload_file = st.file_uploader(label='Upload',max_upload_size = 20 ,type=["txt", "pdf","md","py"])
 if upload_file == None:
     st.warning(body='please upload file')
 else:
-    st.text_area(label='text_reader' , value=upload_file.getvalue())
+    file_manager.index_file(upload_file= upload_file)
     query = st.text_input(label='input retriever')
     button = st.button(label='confirm')
-    if button:
-        retriever = rag.retriever(upload_file=upload_file)
-        st.text_area(label = 'rag_response' , value=rag.find_retrieve(query=query , best_retriever=retriever))
+    if button:pass
+         #st.text_area(asyncio.run(main(query=query)))
 # except:
 #     st.error( body="you should upload pdf or txt file ")
