@@ -7,10 +7,17 @@ from dotenv import load_dotenv
 from fastmcp import FastMCP
 from fastmcp.server import create_proxy
 
+from tools.python_validator import PythonValidator
 from tools.rag import RAG
 
-rag =RAG()
+BASE_DIR = Path(__file__).resolve().parent.parent
 
+WORKSPACE = BASE_DIR / "workspace" / "python"
+
+rag =RAG()
+validator = PythonValidator(
+    workspace_dir=WORKSPACE
+)
 load_dotenv()
 
 
@@ -45,7 +52,22 @@ async def files_rag(query: str) -> str:
     top3 = rag.find_retrieve(query=query)
     return top3
 
+# @mcp.tool
+# def validate_python_file(file_path: str) -> dict:
+#     """
+#     Validate a Python file by executing it.
 
+#     Use this after editing or fixing a Python file.
+
+#     Args:
+#         file_path:
+#             Path of the Python file inside the Python workspace.
+
+#     Returns:
+#         Validation result including stdout, stderr and return code.
+#     """
+
+#     return validator.validate(file_path)
 
 
 mcp.mount(

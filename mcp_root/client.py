@@ -5,6 +5,8 @@ from pathlib import Path
 skills_dir = Path(__file__).parent.parent / "skills"
 workspace_dir = Path(__file__).parent.parent / "workspace"
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from typing import Annotated, Literal, TypedDict
+
 from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
 from deepagents.middleware.skills import SkillsMiddleware
@@ -61,40 +63,42 @@ skills_middleware = SkillsMiddleware(
     backend=skills_backend,
     sources=["skills"],  # نسبی به root = mini_chatbot
 )
+
 async def main():
     async with  MCPAdapter("http://localhost:8050/mcp") as adapter:
         
         tools = await adapter.list_tools()
-        
+        return tools
+
         # for tool in tools:
         #     print(tool.name)
-        agent = create_deep_agent(model=_llm_openai ,
-                                  tools=tools ,
-                                  skills=[str(skills_dir)],
-                                  checkpointer= _checkpointer,
-                                  backend=FilesystemBackend(root_dir=f'{workspace_dir}/python',virtual_mode=True),
-                                  subagents=[python_fixer_subagent,daily_planner_subagent],
-                                  middleware=[skills_middleware]
-                                  
-                                  )
-        async for chunk in agent.astream(
-            {
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": """please fix the but in this file main.py"""
-                    }
-                ]
-            },
-            config={
-                "configurable": {
-                    "thread_id": "user_1"
-                }
-            }
-        ):
-            print(chunk)
+        #  agent = create_deep_agent(model=_llm_openai ,
+        #                           tools=tools ,
+        #                           skills=[str(skills_dir)],
+        #                           checkpointer= _checkpointer,
+        #                           backend=FilesystemBackend(root_dir=f'{workspace_dir}/python',virtual_mode=True),
+        #                           subagents=[python_fixer_subagent,daily_planner_subagent],
+        #                           middleware=[skills_middleware]
+        #                           )
+        
+        # async for chunk in agent.astream(
+        #     {
+        #         "messages": [
+        #             {
+        #                 "role": "user",
+        #                 "content": """please fix the but in this file main.py"""
+        #             }
+        #         ]
+        #     },
+        #     config={
+        #         "configurable": {
+        #             "thread_id": "user_1"
+        #         }
+        #     }
+        # ):
+        #     print(chunk)
 
-asyncio.run(main())
+# asyncio.run(main())
                    
         
     

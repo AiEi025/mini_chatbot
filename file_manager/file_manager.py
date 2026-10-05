@@ -30,6 +30,7 @@ class File_Manager:
         # مسیر Chroma
         self.CHROMA_DIR = self.BASE_DIR / "chroma_db"
         self.PATH_COLLECTION = Path("./collection.json")
+        self.PYTHON_COLLECTION = Path("./py_collection.json")
 
         # Embedding model
         self.embeddings = HuggingFaceEmbeddings(
@@ -140,7 +141,8 @@ class File_Manager:
             )
         elif suffix == '.py':
             safe_name = Path(upload_file_name)
-            
+            with open(self.PYTHON_COLLECTION, 'w', encoding='utf-8') as w:
+                json.dump({"collection_name": upload_file_name}, w)
             workspace_dir = self.WORKSPACE / "python"
             workspace_dir.mkdir(parents=True ,exist_ok=True)
             dest = workspace_dir / safe_name
