@@ -16,7 +16,7 @@ class RAG:
     def __init__(self):
 
         # مسیر Chroma
-        self.CHROMA_DIR = self.BASE_DIR / "chroma_db"
+        self.CHROMA_DIR = self.BASE_DIR / ".chroma_db"
         self.PATH_COLLECTION = Path("./collection.json")
 
         # Retriever در ابتدا وجود ندارد

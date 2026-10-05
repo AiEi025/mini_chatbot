@@ -28,7 +28,7 @@ class File_Manager:
         self.WORKSPACE=self.BASE_DIR /"workspace"
 
         # مسیر Chroma
-        self.CHROMA_DIR = self.BASE_DIR / "chroma_db"
+        self.CHROMA_DIR = self.BASE_DIR / ".chroma_db"
         self.PATH_COLLECTION = Path("./collection.json")
         self.PYTHON_COLLECTION = Path("./py_collection.json")
 
