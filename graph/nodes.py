@@ -11,7 +11,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import state
 from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
-
 from graph.tools import CustomAgent, extract_tool_calls
 from mcp_root.client import main
 from model.model import Llm_model
@@ -91,7 +90,7 @@ def python_node(g_state:state.Graph_state)->state.Graph_state:
                             "content": prompt
                         }
                     ]
-                },config={'configurable':{'thread_id':'user_1'}}
+                }
             )
 
         return {
@@ -123,7 +122,7 @@ def python_node(g_state:state.Graph_state)->state.Graph_state:
                                 "content": prompt
                             }
                         ]
-                    },config={'configurable':{'thread_id':'user_1'}}
+                    }
                     
                 )
         return {'messages':result["messages"] , 'validation_feedback':"" , "retry":retry}
@@ -174,7 +173,7 @@ def planning_node(g_state:state.Graph_state)->state.Graph_state:
                     "content": question
                 }
                 ]
-            },config={'configurable':{'thread_id':'user_1'}})
+            })
         return {'messages':result['messages']}
     else:
         feedback = g_state.validation_feedback
@@ -201,7 +200,7 @@ Return an improved final plan.
                             "role": "user",
                             "content": prompt
                         }
-                        ]},config={'configurable':{'thread_id':'user_1'}})
+                        ]})
         return{'messages':result['messages'] , 'retry':retry}
         
         
@@ -267,7 +266,7 @@ After using the tools, provide a clear final answer to the user.
         result = tool_agent.invoke({'messages':[{
             'role':'user',
             'content':prompt
-        }]},config={'configurable':{'thread_id':'user_1'}})
+        }]})
         return {'messages':result['messages']}
     
     last_message = g_state.messages[-1].content
@@ -297,7 +296,7 @@ Return a new, improved final answer to the user.
     result = tool_agent.invoke({'messages':[{
         'role':'user',
         'content':prompt
-    }]},config={'configurable':{'thread_id':'user_1'}})
+    }]})
     return{'messages':result['messages'] , 'retry':retry}
 
 def tools_validation(g_state:state.Graph_state)->state.Graph_state:

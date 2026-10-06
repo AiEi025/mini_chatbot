@@ -36,13 +36,13 @@ class CustomAgent:
                                      ),
                                      middleware=[self.skills_middleware],
                                      skills=[str(self.skill_path)],
-                                     checkpointer=self.checkpointer,
+                                    #  checkpointer=self.checkpointer,
                                      tools=self.tools)
         elif self.agent_type == 'l_agent':
             return create_agent(model=self.model,
                                 tools=self.tools,
                                 system_prompt= self.sysprompt,
-                                checkpointer=self.checkpointer
+                                # checkpointer=self.checkpointer
                                 )
         else:
             raise ValueError('you must choose valid agent type')
