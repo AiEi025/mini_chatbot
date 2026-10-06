@@ -1,7 +1,8 @@
-import json
 import sys
 from pathlib import Path
 from typing import Annotated, Literal, TypedDict
+
+from pydantic import Field
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -10,17 +11,48 @@ from langgraph.graph.message import add_messages
 from pydantic import BaseModel
 
 
-class Graph_state(BaseModel):
-    messages: Annotated[list[BaseMessage] , add_messages]
-    question:str = ""
-    status:Literal['python','planning','tools']='tools'
-    attempts: int = 3
-    validation:bool = True
-    validation_feedback:str = "" 
-    file_path: str | None = None
-    
 class Router_state(TypedDict):
     state:Literal['python','planning','tools']=None
 class Planning_state(TypedDict):
     status:Literal['ok','no']='ok'
     feedback:str = ""
+class ToolValidationState(BaseModel):
+    status: bool
+    feedback: str
+class RetryContext(BaseModel):
+    attempts_used: int = 0
+    max_attempts: int = 3
+
+    @property
+    def can_retry(self) -> bool:
+        return self.attempts_used < self.max_attempts
+    @property
+    def exhausted(self) -> bool:
+        return self.attempts_used >= self.max_attempts
+
+    def record_attempt(self) -> "RetryContext":
+        return self.model_copy(
+            update={
+                "attempts_used": self.attempts_used + 1
+            }
+        )
+
+class Graph_state(BaseModel):
+    messages: Annotated[list[BaseMessage], add_messages]
+
+    question: str = ""
+
+    status: Literal[
+        "python",
+        "planning",
+        "tools"
+    ] = "tools"
+
+    validation: bool = True
+    validation_feedback: str = ""
+
+    retry: RetryContext = Field(
+        default_factory=RetryContext
+    )
+
+    file_path: str | None = None

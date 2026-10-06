@@ -41,9 +41,21 @@ class CustomAgent:
         elif self.agent_type == 'l_agent':
             return create_agent(model=self.model,
                                 tools=self.tools,
-                                system_prompt= self.sysprompt
+                                system_prompt= self.sysprompt,
+                                checkpointer=self.checkpointer
                                 )
         else:
             raise ValueError('you must choose valid agent type')
         
-        
+def extract_tool_calls(messages):
+
+    tool_calls = []
+
+    for message in messages:
+
+        calls = getattr(message, "tool_calls", None)
+
+        if calls:
+            tool_calls.extend(calls)
+
+    return tool_calls
