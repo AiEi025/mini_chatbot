@@ -8,9 +8,10 @@ from tools import python_validator
 skills_dir = Path(__file__).parent.parent / "skills"
 workspace_dir = Path(__file__).parent.parent / "workspace"
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import state
 from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
+
+from graph import state
 from graph.tools import CustomAgent, extract_tool_calls
 from mcp_root.client import main
 from model.model import Llm_model
@@ -21,9 +22,9 @@ py_collection = Path(__file__).resolve().parent.parent /'py_collection.json'
 mcp_tools = asyncio.run(main())
 # tool_node = ToolNode(mcp_tools)
  
-def router(g_state:state.Graph_state)->state.Graph_state:
-    query = g_state.messages[-1].content
-    llm = Llm_model('openrouter',0).chose_model().with_structured_output(state.Router_state)
+def router_node(g_state:state.Graph_state)->state.Graph_state:
+    question = g_state.question
+    llm = Llm_model('deepseek-v4-flash',0).chose_model().with_structured_output(state.Router_state)
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
@@ -41,21 +42,21 @@ def router(g_state:state.Graph_state)->state.Graph_state:
               prioritization, or time management.
 
             - tools:
-              when the request requires web search, RAG, or another tool.
+              when the request requires web search, RAG,Uploaded files, or another tool.
 
             Return only the structured classification.
             """
         ),
-        ("human", "{query}")
+        ("human", "{question}")
     ])
     chain = prompt | llm
-    result = chain.invoke({"query": query})    
-    return {'status':result["messages"] , 'question':query}
+    result = chain.invoke({"question": question})    
+    return {'status':result["category"]}
 
 python_agent = CustomAgent(model=Llm_model("deepseek-v4-flash",0).chose_model(),
                            agent_type='d_agent',
                            skill_path=skills_dir/ "python-fixer",
-                           workspace_path=workspace_dir/'python').build()
+                           workspace_path=workspace_dir/'python')
 def python_node(g_state:state.Graph_state)->state.Graph_state:
     
     with open(py_collection, 'r', encoding='utf-8') as r:
@@ -125,9 +126,9 @@ def python_node(g_state:state.Graph_state)->state.Graph_state:
                     }
                     
                 )
-        return {'messages':result["messages"] , 'validation_feedback':"" , "retry":retry}
+        return {'messages':result["messages"] , 'validation_feedback':validation_feedback , "retry":retry}
               
-def validation_node(g_state: state.Graph_state) -> state.Graph_state: 
+def py_validation(g_state: state.Graph_state) -> state.Graph_state: 
     file_path = g_state.file_path
     if not file_path:
         raise ValueError("file_path is missing")
@@ -135,10 +136,10 @@ def validation_node(g_state: state.Graph_state) -> state.Graph_state:
     retry = g_state.retry
     if retry.exhausted:
         validation = True
-        return {'validation_feedback':result['stdout'] + result['stderr'] , 'validation':validation}
-    return {'validation_feedback':result['stdout'] + result['stderr'] , 'validation':result['ok']}
+        return {'validation_feedback':f"stdout response:{result['stdout']}, and stderr response:{result['stderr']}" , 'validation':validation}
+    return {'validation_feedback':f"stdout response:{result['stdout']}, and stderr response:{result['stderr']}" , 'validation':result['ok']}
 
-def cond_python(g_state: state.Graph_state)->str|state.Graph_state:
+def cond_python(g_state: state.Graph_state)->str:
     validation = g_state.validation
     retry = g_state.retry 
     if validation or retry.exhausted:
@@ -161,7 +162,7 @@ When the user asks for help planning their day:
 ## Guidelines
 - Confirm available working hours before planning.
 - Ask specific questions if the user is vague.
-- Suggest breaks and buffer time between high-focus tasks.""").build()
+- Suggest breaks and buffer time between high-focus tasks.""")
 def planning_node(g_state:state.Graph_state)->state.Graph_state:
     validation = g_state.validation
     if validation:

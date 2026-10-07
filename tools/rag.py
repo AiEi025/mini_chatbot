@@ -14,7 +14,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 class RAG:
 
     def __init__(self):
-
+        self.BASE_DIR = Path(__file__).resolve().parent.parent
         # مسیر Chroma
         self.CHROMA_DIR = self.BASE_DIR / ".chroma_db"
         self.PATH_COLLECTION = Path("./collection.json")

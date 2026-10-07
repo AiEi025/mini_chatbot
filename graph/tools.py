@@ -8,44 +8,68 @@ from deepagents.middleware.skills import SkillsMiddleware
 from langchain.agents import create_agent
 from langgraph.checkpoint.memory import MemorySaver
 
+# read_only_rules = [
+#     FilesystemPermission(
+#         operations=["write"],          # عملیات نوشتن
+#         paths=["/**"],                 # در تمام مسیرها
+#         mode="deny",                   # را ممنوع کن
+#     )]
 
 class CustomAgent:
-    def __init__(self ,model, agent_type:Literal['l_agent','d_agent'] ,skill_path:str|Path|None , workspace_path:str|Path|None , tools = None , sysprompt=None):
+    def __init__(
+        self,
+        model,
+        agent_type: Literal["l_agent", "d_agent"],
+        skill_path: str | Path | None = None,
+        workspace_path: str | Path | None = None,
+        tools=None,
+        sysprompt=None,
+        checkpointer=None,
+    ):
         self.agent_type = agent_type
-        self.skill_path = skill_path
-        self.workspace_path = workspace_path
+        self.skill_path = Path(skill_path) if skill_path else None
+        self.workspace_path = Path(workspace_path) if workspace_path else None
         self.model = model
-        self.checkpointer = MemorySaver()
-        self.tools = tools
-        self.sysprompt =sysprompt
-        base_dir=str(Path(__file__).parent.parent) 
-        skills_backend = FilesystemBackend(
-    root_dir=str(base_dir),  # mini_chatbot
-    virtual_mode=True
+        self.checkpointer = checkpointer or MemorySaver()
+        self.tools = tools or []
+        self.sysprompt = sysprompt
+
+        middlewares = []
+        if self.skill_path:
+            backend = FilesystemBackend(root_dir=self.skill_path ,virtual_mode=True)
+            middlewares.append(
+                SkillsMiddleware(
+                    backend=backend,
+                    sources=["skills/"]  # مسیر نسبی به backend root
+                )
 )
-        self.skills_middleware = SkillsMiddleware(
-    backend=skills_backend,
-    sources=["skills"],  # نسبی به root = mini_chatbot
-)
-    def build(self):
-        if self.agent_type == 'd_agent':
-            return create_deep_agent(model= self.model,
-                                     backend= FilesystemBackend(
-                                         root_dir=str(self.workspace_path),
-                                         virtual_mode= True
-                                     ),
-                                     middleware=[self.skills_middleware],
-                                     skills=[str(self.skill_path)],
-                                    #  checkpointer=self.checkpointer,
-                                     tools=self.tools)
-        elif self.agent_type == 'l_agent':
-            return create_agent(model=self.model,
-                                tools=self.tools,
-                                system_prompt= self.sysprompt,
-                                # checkpointer=self.checkpointer
-                                )
+
+        if self.workspace_path:
+            self.workspace_path.mkdir(parents=True, exist_ok=True)
+            backend = FilesystemBackend(root_dir=str(self.workspace_path))
         else:
-            raise ValueError('you must choose valid agent type')
+            backend = None
+
+        # انتخاب نوع agent
+        if self.agent_type == "d_agent":
+            self.agent = create_deep_agent(
+                model=self.model,
+                tools=self.tools,
+                system_prompt=self.sysprompt,
+                backend=backend,       
+                middleware=middlewares,
+                checkpointer=self.checkpointer,
+            )
+        elif self.agent_type == "l_agent":
+            self.agent = create_agent(
+                model=self.model,
+                tools=self.tools,
+                system_prompt=self.sysprompt,
+                middleware=middlewares,
+                checkpointer=self.checkpointer,
+            )
+        else:
+            raise ValueError(f"Unknown agent_type: {self.agent_type}")
         
 def extract_tool_calls(messages):
 
