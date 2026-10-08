@@ -15,19 +15,17 @@ file_manager = File_Manager()
 
 # try:
 upload_file = st.file_uploader(label='Upload',max_upload_size = 20 ,type=["txt", "pdf","md","py"])
-if upload_file == None:
-    st.warning(body='please upload file')
-else:
+query = st.text_input(label='input retriever')
+if upload_file:
     file_manager.index_file(upload_file= upload_file)
-    query = st.text_input(label='input retriever')
-    button = st.button(label='confirm')
-    if button and query:
-        result = asyncio.run(run_graph(query))
 
-        st.text_area(label='answer',
-            value=result["messages"][-1].content
-        )
-    else:
+button = st.button(label='confirm')
+if button and query:
+    result = asyncio.run(run_graph(query))
+    st.text_area(label='answer',
+        value=result["messages"][-1].content
+    )
+else:
         st.warning(body='please please write your query')
         
 # except:

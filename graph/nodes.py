@@ -3,11 +3,10 @@ import json
 import sys
 from pathlib import Path
 
-from tools import python_validator
-
-skills_dir = Path(__file__).parent.parent / "skills"
+skills_dir = Path(__file__).parent.parent
 workspace_dir = Path(__file__).parent.parent / "workspace"
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
 
@@ -15,13 +14,12 @@ from graph import state
 from graph.tools import CustomAgent, extract_tool_calls
 from mcp_root.client import main
 from model.model import Llm_model
+from tools.python_validator import PythonValidator
 
 load_dotenv()
 py_collection = Path(__file__).resolve().parent.parent /'py_collection.json'
-
 mcp_tools = asyncio.run(main())
 # tool_node = ToolNode(mcp_tools)
- 
 def router_node(g_state:state.Graph_state)->state.Graph_state:
     question = g_state.question
     llm = Llm_model('deepseek-v4-flash').chose_model().with_structured_output(state.Router_state, method="json_mode")
@@ -65,15 +63,14 @@ def route_decision(g_state:state.Graph_state)->str:
         raise KeyError()
 python_agent = CustomAgent(model=Llm_model("deepseek-v4-flash",0).chose_model(),
                            agent_type='d_agent',
-                           skill_path=skills_dir/ "python-fixer",
-                           workspace_path=workspace_dir/'python')
+                           skill_path=skills_dir,
+                           workspace_path=workspace_dir/'python/')
 def python_node(g_state:state.Graph_state)->state.Graph_state:
     
     with open(py_collection, 'r', encoding='utf-8') as r:
         data = json.load(r)
     question = g_state.question
-    g_state.file_path =data['collection_name']
-    file_path = g_state.file_path
+    file_path =data['collection_name']
     validation = g_state.validation
     if not file_path:
         raise ValueError("file_path is missing")
@@ -105,7 +102,7 @@ def python_node(g_state:state.Graph_state)->state.Graph_state:
             )
 
         return {
-        "messages": result["messages"]
+        "messages": result["messages"] , "file_path":file_path
         }
     elif validation == False:
         validation_feedback = g_state.validation_feedback
@@ -142,7 +139,7 @@ def py_validation(g_state: state.Graph_state) -> state.Graph_state:
     file_path = g_state.file_path
     if not file_path:
         raise ValueError("file_path is missing")
-    result = python_validator.PythonValidator(workspace_dir = workspace_dir).validate(file_path=file_path)
+    result = PythonValidator(workspace_dir = workspace_dir).validate(file_path=file_path)
     retry = g_state.retry
     if retry.exhausted:
         validation = True
@@ -158,7 +155,7 @@ def cond_python(g_state: state.Graph_state)->str:
 
 planning_agent = CustomAgent(model = Llm_model('deepseek-v4-flash' , 0.3).chose_model() ,
                              agent_type='d_agent',
-                             skill_path=skills_dir/ "daily-planner",
+                             skill_path=skills_dir,
                              sysprompt="""You are a daily planning assistant. Your job is to help the user organize their day effectively.
 
 When the user asks for help planning their day:

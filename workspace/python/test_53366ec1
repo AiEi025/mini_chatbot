@@ -13,6 +13,14 @@ LOG_PATTERN = re.compile(
     r'"(?P<method>\w+) (?P<path>\S+) \S+" (?P<status>\d{3}) (?P<size>\d+)'
 )
 
+# Hour field of a common-log-format timestamp such as
+# '10/Jun/2025:14:22:01 +0000'. The date part is matched loosely so that
+# timestamps with a single-digit day (e.g. '1/Jun/2025:14:22:01 +0000')
+# are handled too instead of relying on fixed character offsets.
+HOUR_PATTERN = re.compile(
+    r'\d{1,2}/[A-Za-z]{3}/\d{4}:(?P<hour>\d{2}):\d{2}:\d{2}'
+)
+
 # (ip, path) pairs already recorded
 _seen = {}
 
@@ -22,7 +30,7 @@ def load_log(path: str) -> str:
     try:
         with open(path, 'r') as f:
             return f.read()
-    except:
+    except OSError:
         return ''
 
 
@@ -36,7 +44,11 @@ def parse_lines(raw: str) -> Iterator[dict]:
 
 def extract_hour(timestamp: str) -> int:
     """'10/Jun/2025:14:22:01 +0000' -> 14  (hour of day, 24h clock)."""
-    return int(timestamp[12:13])
+    m = HOUR_PATTERN.search(timestamp)
+    if m:
+        return int(m.group('hour'))
+    # Fallback for timestamps that don't match the common-log format.
+    return int(timestamp.split(':')[1])
 
 
 def is_duplicate(entry: dict) -> bool:
@@ -60,13 +72,13 @@ def error_rate(entries) -> float:
     entries = list(entries)
     if not entries:
         return 0.0
-    errors = sum(1 for e in entries if int(e['status']) >= 500)
+    errors = sum(1 for e in entries if 500 <= int(e['status']) < 600)
     return round(errors / len(entries), 4)
 
 
 def build_report(raw_log: str) -> dict:
     """Aggregate statistics over a raw log string."""
-    entries = parse_lines(raw_log)
+    entries = list(parse_lines(raw_log))
     return {
         'top_paths': top_paths(entries),
         'error_rate': error_rate(entries),
@@ -81,6 +93,7 @@ def busiest_hour(raw_log: str) -> int:
 
 def unique_visitors(raw_log: str) -> int:
     """Number of distinct (ip, path) pairs within one report run."""
+    _seen.clear()  # start each report run with a fresh registry
     return sum(1 for e in parse_lines(raw_log) if not is_duplicate(e))
 
 

@@ -20,6 +20,11 @@ When a user uploads a Python file and asks for corrections:
 
 5. **Report**: Explain to the user what was wrong and what you changed.
 
+The target Python file already exists in the workspace.
+Always inspect the existing file before editing.
+Modify the existing target file.
+Never create a replacement file unless explicitly requested.
+
 ## Guidelines
 
 - Always preserve the original code style (indentation, quotes) when possible.

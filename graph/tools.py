@@ -40,7 +40,7 @@ class CustomAgent:
             middlewares.append(
                 SkillsMiddleware(
                     backend=backend,
-                    sources=["skills/"]  # مسیر نسبی به backend root
+                    sources=["skills/"]
                 )
 )
 

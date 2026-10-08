@@ -141,8 +141,6 @@ class File_Manager:
             )
         elif suffix == '.py':
             safe_name = Path(upload_file_name)
-            with open(self.PYTHON_COLLECTION, 'w', encoding='utf-8') as w:
-                json.dump({"collection_name": upload_file_name}, w)
             workspace_dir = self.WORKSPACE / "python"
             workspace_dir.mkdir(parents=True ,exist_ok=True)
             dest = workspace_dir / safe_name
@@ -154,10 +152,16 @@ class File_Manager:
                 dest = workspace_dir / (
                                     f"{dest.stem}_{file_hash}{dest.suffix}"
                                 )
-                
+                with open(self.PYTHON_COLLECTION, 'w', encoding='utf-8') as w:
+                    json.dump({"collection_name": dest.stem}, w)
+            else:
+                with open(self.PYTHON_COLLECTION, 'w', encoding='utf-8') as w:
+                    json.dump({"collection_name": dest.stem}, w)
+                    
             dest.write_bytes(
                              upload_file_getvalue
                             )
+            
         
         else:pass
 
