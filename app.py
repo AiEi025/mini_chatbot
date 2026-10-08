@@ -1,3 +1,4 @@
+import asyncio
 import sys
 from pathlib import Path
 
@@ -20,11 +21,14 @@ else:
     file_manager.index_file(upload_file= upload_file)
     query = st.text_input(label='input retriever')
     button = st.button(label='confirm')
-    if button:
-        result = run_graph(query)
+    if button and query:
+        result = asyncio.run(run_graph(query))
 
-        st.text_area(
+        st.text_area(label='answer',
             value=result["messages"][-1].content
         )
+    else:
+        st.warning(body='please please write your query')
+        
 # except:
 #     st.error( body="you should upload pdf or txt file ")

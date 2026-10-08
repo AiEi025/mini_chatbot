@@ -24,7 +24,7 @@ mcp_tools = asyncio.run(main())
  
 def router_node(g_state:state.Graph_state)->state.Graph_state:
     question = g_state.question
-    llm = Llm_model('deepseek-v4-flash',0).chose_model().with_structured_output(state.Router_state)
+    llm = Llm_model('deepseek-v4-flash').chose_model().with_structured_output(state.Router_state, method="json_mode")
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
@@ -44,15 +44,25 @@ def router_node(g_state:state.Graph_state)->state.Graph_state:
             - tools:
               when the request requires web search, RAG,Uploaded files, or another tool.
 
-            Return only the structured classification.
+            Return a JSON object with a single field named "state"
+            whose value is one of: "python", "planning", "tools".
             """
         ),
         ("human", "{question}")
     ])
     chain = prompt | llm
     result = chain.invoke({"question": question})    
-    return {'status':result["category"]}
-
+    return {'status':result["state"]}
+def route_decision(g_state:state.Graph_state)->str:
+    status = g_state.status
+    if status == 'tools':
+        return 'tools'
+    elif status == 'python':
+        return 'python'
+    elif status == 'planning':
+        return 'plan'
+    else:
+        raise KeyError()
 python_agent = CustomAgent(model=Llm_model("deepseek-v4-flash",0).chose_model(),
                            agent_type='d_agent',
                            skill_path=skills_dir/ "python-fixer",
@@ -83,7 +93,7 @@ def python_node(g_state:state.Graph_state)->state.Graph_state:
                     Do not modify unrelated files.
                     """
         
-        result = python_agent.invoke(
+        result = python_agent.agent.invoke(
                 {
                     "messages": [
                         {
@@ -115,7 +125,7 @@ def python_node(g_state:state.Graph_state)->state.Graph_state:
                             """
         retry = g_state.retry.record_attempt()
         
-        result = python_agent.invoke(
+        result = python_agent.agent.invoke(
                     {
                         "messages": [
                             {
@@ -167,7 +177,7 @@ def planning_node(g_state:state.Graph_state)->state.Graph_state:
     validation = g_state.validation
     if validation:
         question = g_state.question
-        result = planning_agent.invoke({
+        result = planning_agent.agent.invoke({
         "messages": [
                 {
                     "role": "user",
@@ -196,7 +206,7 @@ Original user request:
 Return an improved final plan.
 """
         retry = g_state.retry.record_attempt()
-        result = planning_agent.invoke({"messages": [
+        result = planning_agent.agent.invoke({"messages": [
                         {
                             "role": "user",
                             "content": prompt
@@ -249,7 +259,7 @@ tool_agent = CustomAgent(model=Llm_model('deepseek-v4-flash' , 0.3).chose_model(
                          agent_type='l_agent',
                          tools=mcp_tools,
                          sysprompt=None)
-def tools_node(g_state:state.Graph_state)->state.Graph_state:
+async def tools_node(g_state:state.Graph_state)->state.Graph_state:
     question = g_state.question
     retry = g_state.retry.record_attempt()
     if g_state.validation:
@@ -264,7 +274,7 @@ Do not use a tool if it is not needed.
 
 After using the tools, provide a clear final answer to the user.
 """
-        result = tool_agent.invoke({'messages':[{
+        result = await tool_agent.agent.ainvoke({'messages':[{
             'role':'user',
             'content':prompt
         }]})
@@ -294,7 +304,7 @@ Do not repeat the previous mistake.
 Return a new, improved final answer to the user.
 """
 
-    result = tool_agent.invoke({'messages':[{
+    result = await tool_agent.agent.ainvoke({'messages':[{
         'role':'user',
         'content':prompt
     }]})

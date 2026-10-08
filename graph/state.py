@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 
 class Router_state(TypedDict):
-    state:Literal['python','planning','tools']=None
+    state:Literal['python','planning','tools']
 class Planning_state(TypedDict):
     status:Literal['ok','no']='ok'
     feedback:str = ""

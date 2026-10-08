@@ -11,7 +11,7 @@ from graph.graph import graph
 from graph.state import Graph_state
 
 
-def run_graph(user_input: str):
+async def run_graph(user_input: str):
     initial_state = Graph_state(
         messages=[
             HumanMessage(content=user_input)
@@ -25,7 +25,7 @@ def run_graph(user_input: str):
         }
     }
 
-    result = graph.invoke(
+    result = await graph.ainvoke(
         initial_state,
         config=config
     )
