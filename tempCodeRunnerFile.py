@@ -1,1 +1,0 @@
-upload_file = st.file_uploader(label='Upload',max_upload_size = 20 ,type=["txt", "pdf","md","py"])

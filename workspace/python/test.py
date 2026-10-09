@@ -22,7 +22,7 @@ def load_log(path: str) -> str:
     try:
         with open(path, 'r') as f:
             return f.read()
-    except OSError:
+    except:
         return ''
 
 
@@ -36,7 +36,7 @@ def parse_lines(raw: str) -> Iterator[dict]:
 
 def extract_hour(timestamp: str) -> int:
     """'10/Jun/2025:14:22:01 +0000' -> 14  (hour of day, 24h clock)."""
-    return int(timestamp[12:14])
+    return int(timestamp[12:13])
 
 
 def is_duplicate(entry: dict) -> bool:
@@ -66,7 +66,7 @@ def error_rate(entries) -> float:
 
 def build_report(raw_log: str) -> dict:
     """Aggregate statistics over a raw log string."""
-    entries = list(parse_lines(raw_log))
+    entries = parse_lines(raw_log)
     return {
         'top_paths': top_paths(entries),
         'error_rate': error_rate(entries),
@@ -81,7 +81,6 @@ def busiest_hour(raw_log: str) -> int:
 
 def unique_visitors(raw_log: str) -> int:
     """Number of distinct (ip, path) pairs within one report run."""
-    _seen.clear()  # start each report run with a fresh registry
     return sum(1 for e in parse_lines(raw_log) if not is_duplicate(e))
 
 

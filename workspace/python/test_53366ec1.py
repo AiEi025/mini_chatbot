@@ -13,14 +13,6 @@ LOG_PATTERN = re.compile(
     r'"(?P<method>\w+) (?P<path>\S+) \S+" (?P<status>\d{3}) (?P<size>\d+)'
 )
 
-# Hour field of a common-log-format timestamp such as
-# '10/Jun/2025:14:22:01 +0000'. The date part is matched loosely so that
-# timestamps with a single-digit day (e.g. '1/Jun/2025:14:22:01 +0000')
-# are handled too instead of relying on fixed character offsets.
-HOUR_PATTERN = re.compile(
-    r'\d{1,2}/[A-Za-z]{3}/\d{4}:(?P<hour>\d{2}):\d{2}:\d{2}'
-)
-
 # (ip, path) pairs already recorded
 _seen = {}
 
@@ -44,11 +36,7 @@ def parse_lines(raw: str) -> Iterator[dict]:
 
 def extract_hour(timestamp: str) -> int:
     """'10/Jun/2025:14:22:01 +0000' -> 14  (hour of day, 24h clock)."""
-    m = HOUR_PATTERN.search(timestamp)
-    if m:
-        return int(m.group('hour'))
-    # Fallback for timestamps that don't match the common-log format.
-    return int(timestamp.split(':')[1])
+    return int(timestamp[12:14])
 
 
 def is_duplicate(entry: dict) -> bool:
@@ -72,7 +60,7 @@ def error_rate(entries) -> float:
     entries = list(entries)
     if not entries:
         return 0.0
-    errors = sum(1 for e in entries if 500 <= int(e['status']) < 600)
+    errors = sum(1 for e in entries if int(e['status']) >= 500)
     return round(errors / len(entries), 4)
 
 
@@ -93,7 +81,7 @@ def busiest_hour(raw_log: str) -> int:
 
 def unique_visitors(raw_log: str) -> int:
     """Number of distinct (ip, path) pairs within one report run."""
-    _seen.clear()  # start each report run with a fresh registry
+    _seen.clear()
     return sum(1 for e in parse_lines(raw_log) if not is_duplicate(e))
 
 

@@ -3,7 +3,7 @@ import json
 import sys
 from pathlib import Path
 
-skills_dir = Path(__file__).parent.parent
+base_dir = Path(__file__).parent.parent
 workspace_dir = Path(__file__).parent.parent / "workspace"
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -63,7 +63,7 @@ def route_decision(g_state:state.Graph_state)->str:
         raise KeyError()
 python_agent = CustomAgent(model=Llm_model("deepseek-v4-flash",0).chose_model(),
                            agent_type='d_agent',
-                           skill_path=skills_dir,
+                           skill_path=base_dir,
                            workspace_path=workspace_dir/'python/')
 def python_node(g_state:state.Graph_state)->state.Graph_state:
     
@@ -102,7 +102,7 @@ def python_node(g_state:state.Graph_state)->state.Graph_state:
             )
 
         return {
-        "messages": result["messages"] , "file_path":file_path
+        "messages": result["messages"][-1] , "file_path":file_path
         }
     elif validation == False:
         validation_feedback = g_state.validation_feedback
@@ -133,13 +133,13 @@ def python_node(g_state:state.Graph_state)->state.Graph_state:
                     }
                     
                 )
-        return {'messages':result["messages"] , 'validation_feedback':validation_feedback , "retry":retry}
+        return {'messages':result["messages"][-1] , 'validation_feedback':validation_feedback , "retry":retry}
               
 def py_validation(g_state: state.Graph_state) -> state.Graph_state: 
     file_path = g_state.file_path
     if not file_path:
         raise ValueError("file_path is missing")
-    result = PythonValidator(workspace_dir = workspace_dir).validate(file_path=file_path)
+    result = PythonValidator(workspace_dir = workspace_dir/'python/').validate(file_path=file_path)
     retry = g_state.retry
     if retry.exhausted:
         validation = True
@@ -155,7 +155,7 @@ def cond_python(g_state: state.Graph_state)->str:
 
 planning_agent = CustomAgent(model = Llm_model('deepseek-v4-flash' , 0.3).chose_model() ,
                              agent_type='d_agent',
-                             skill_path=skills_dir,
+                             skill_path=base_dir,
                              sysprompt="""You are a daily planning assistant. Your job is to help the user organize their day effectively.
 
 When the user asks for help planning their day:
@@ -216,7 +216,10 @@ def planning_validation(g_state:state.Graph_state)->state.Graph_state:
     question = g_state.question
     message = g_state.messages[-1].content
     prompt = f"""
-You are a strict planning critic.
+You are a strict but fair planning critic.
+
+Your task is to evaluate the generated plan against the user's
+original request and determine whether it is acceptable.
 
 User request:
 {question}
@@ -224,21 +227,56 @@ User request:
 Generated plan:
 {message}
 
-Check whether the plan:
-1. Addresses the user's request.
-2. Covers the important tasks.
-3. Has a logical order.
-4. Avoids obvious time conflicts.
-5. Respects constraints mentioned by the user.
-6. Is actionable and realistic.
+Evaluate the plan using the following criteria:
 
-Return:
-- status=True if the plan is acceptable.
-- status=False if it needs revision.
-- feedback explaining what must be improved.
+1. Goal alignment:
+   Does the plan address the user's actual request?
+
+2. Task coverage:
+   Does it include the important tasks and commitments mentioned
+   by the user?
+
+3. Logical ordering:
+   Are tasks arranged in a sensible order?
+
+4. Time feasibility:
+   Are the estimated durations and schedule realistic?
+   Are there any overlapping or conflicting commitments?
+
+5. Constraint handling:
+   Does the plan respect the user's stated constraints,
+   preferences, and commitments?
+
+6. Actionability:
+   Are the tasks specific enough for the user to follow?
+
+7. Missing information:
+   Does the plan make unsupported assumptions that could
+   significantly affect its feasibility?
+
+Decision rules:
+- Set status=True if the plan is reasonably complete, feasible,
+  and aligned with the user's request.
+- Set status=False if there is a significant issue that makes
+  the plan incomplete, impractical, or inconsistent with the request.
+- Do not reject a plan for minor stylistic issues or reasonable
+  assumptions.
+- Do not invent requirements that the user did not mention.
+- If important information is missing, consider whether a
+  reasonable assumption would allow the plan to proceed.
+- If status=False, explain the specific problems and suggest
+  actionable improvements.
+- If status=True, provide brief feedback confirming that the
+  plan is acceptable and mention any important caveat, if needed.
+
+Return the result using the provided structured output schema.
+The status field must be a boolean: true or false.
+The feedback field must be a concise, useful string.
+Do not include any text outside the structured output.
 """
 
-    llm = Llm_model('openrouter').chose_model().with_structured_output(state.Planning_state)
+
+    llm = Llm_model('deepseek-v4-flash').chose_model().with_structured_output(state.Planning_state, method="json_schema")
     result = llm.invoke(prompt)
     retry = g_state.retry.exhausted
     if retry:
@@ -372,7 +410,7 @@ Return:
 Do not mark an answer as invalid merely because no tool was used.
 Judge whether the agent's behavior was appropriate for the user's request.
 """
-    llm = Llm_model('openrouter',0).chose_model().with_structured_output(state.ToolValidationState)
+    llm = Llm_model('deepseek-v4-flash',0).chose_model().with_structured_output(state.ToolValidationState)
     result = llm.invoke(prompt)
     if g_state.retry.exhausted:
         return{'validation_feedback':result.feedback , 'validation':True}
@@ -387,5 +425,3 @@ def cond_tools(g_state:state.Graph_state)->str:
     if validation or retry.exhausted:
         return 'end'
     return 'tools_node'
-    
-  

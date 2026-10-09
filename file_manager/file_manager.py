@@ -153,10 +153,10 @@ class File_Manager:
                                     f"{dest.stem}_{file_hash}{dest.suffix}"
                                 )
                 with open(self.PYTHON_COLLECTION, 'w', encoding='utf-8') as w:
-                    json.dump({"collection_name": dest.stem}, w)
+                    json.dump({"collection_name": dest.stem+dest.suffix}, w)
             else:
                 with open(self.PYTHON_COLLECTION, 'w', encoding='utf-8') as w:
-                    json.dump({"collection_name": dest.stem}, w)
+                    json.dump({"collection_name": dest.stem+dest.suffix}, w)
                     
             dest.write_bytes(
                              upload_file_getvalue
