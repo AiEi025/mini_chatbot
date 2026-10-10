@@ -19,6 +19,7 @@ builder.add_node('plan', node.planning_node)
 builder.add_node('plan_validate', node.planning_validation)
 builder.add_node('tools', node.tools_node)
 builder.add_node('tools_validate', node.tools_validation)
+builder.add_node('general' , node.general_node)
 
 builder.set_entry_point('router')
 
@@ -26,13 +27,14 @@ builder.set_entry_point('router')
 builder.add_conditional_edges(
     'router',
     node.route_decision,
-    {'python': 'python', 'plan': 'plan', 'tools': 'tools'}
+    {'python': 'python', 'plan': 'plan', 'tools': 'tools' , 'general':'general'}
 )
 
 # اجرا → اعتبارسنجی
 builder.add_edge('python', 'py_validate')
 builder.add_edge('plan', 'plan_validate')
 builder.add_edge('tools', 'tools_validate')
+builder.add_edge('general' , END)
 
 # اعتبارسنجی → retry یا پایان
 builder.add_conditional_edges('py_validate',  node.cond_python,   {'end': END, 'python_node': 'python'})

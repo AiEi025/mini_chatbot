@@ -35,7 +35,7 @@ class AsyncRunner:
         )
         return future.result()
 
-async def run_graph(user_input: str):
+async def run_graph(user_input: str , thread_id:str):
     initial_state = Graph_state(
         messages=[
             HumanMessage(content=user_input)
@@ -45,7 +45,7 @@ async def run_graph(user_input: str):
 
     config = {
         "configurable": {
-            "thread_id": "user_123"
+            "thread_id": thread_id
         }
     }
 

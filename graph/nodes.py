@@ -3,6 +3,8 @@ import json
 import sys
 from pathlib import Path
 
+from langchain_core.messages import AIMessage
+
 base_dir = Path(__file__).parent.parent
 workspace_dir = Path(__file__).parent.parent / "workspace"
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -23,7 +25,7 @@ print(mcp_adapter.client)
 # tool_node = ToolNode(mcp_tools)
 def router_node(g_state:state.Graph_state)->state.Graph_state:
     question = g_state.question
-    llm = Llm_model('openrouter').chose_model().with_structured_output(state.Router_state, method="json_mode")
+    llm = Llm_model('deepseek-v4-flash').chose_model().with_structured_output(state.Router_state, method="json_mode")
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
@@ -42,9 +44,15 @@ def router_node(g_state:state.Graph_state)->state.Graph_state:
 
             - tools:
               when the request requires web search, RAG,Uploaded files, or another tool.
+            
+            - general:
+                when the request is a general question, casual conversation,
+                explanation of a concept, translation, summarization,
+                or any other request that does not fit into python,
+                planning, or tools.
 
             Return a JSON object with a single field named "state"
-            whose value is one of: "python", "planning", "tools".
+            whose value is one of: "python", "planning", "tools", "general".
             """
         ),
         ("human", "{question}")
@@ -60,8 +68,11 @@ def route_decision(g_state:state.Graph_state)->str:
         return 'python'
     elif status == 'planning':
         return 'plan'
+    elif status == 'general':
+        return 'general'
     else:
-        raise KeyError()
+        raise ValueError()
+    
 python_agent = CustomAgent(model=Llm_model("openrouter",0).chose_model(),
                            agent_type='d_agent',
                            skill_path=base_dir,
@@ -291,7 +302,7 @@ def cond_planning(g_state:state.Graph_state)->str:
         return 'end'
     return 'planning_node'
 
-tool_agent = CustomAgent(model=Llm_model('openrouter' , 0.3).chose_model(),
+tool_agent = CustomAgent(model=Llm_model('gpt-6-astra' , 0.3).chose_model(),
                          agent_type='l_agent',
                          tools=mcp_tools,
                          sysprompt=None)
@@ -411,7 +422,7 @@ Return:
 Do not mark an answer as invalid merely because no tool was used.
 Judge whether the agent's behavior was appropriate for the user's request.
 """
-    llm = Llm_model('openrouter',0).chose_model().with_structured_output(state.ToolValidationState , method='function_calling')
+    llm = Llm_model('gpt-6-astra',0).chose_model().with_structured_output(state.ToolValidationState , method='function_calling')
     result = llm.invoke(prompt)
     if g_state.retry.exhausted:
         return{'validation_feedback':result.feedback , 'validation':True}
@@ -426,3 +437,45 @@ def cond_tools(g_state:state.Graph_state)->str:
     if validation or retry.exhausted:
         return 'end'
     return 'tools_node'
+
+def general_node(g_state: state.Graph_state) -> dict:
+    question = g_state.question
+
+    llm = Llm_model(
+        "deepseek-v4-flash",
+        0.3,
+    ).chose_model()
+
+    prompt = f"""
+You are a helpful and friendly AI assistant.
+
+Your job is to answer the user's general question clearly,
+accurately, and concisely.
+
+Guidelines:
+- Respond naturally to personal sharing and casual conversation.
+- If the user asks for an explanation, explain step by step.
+- If the user asks for a translation, translate accurately.
+- If the user asks for a summary, summarize the key points.
+- If you don't know the answer, say so honestly.
+- Do not use tools or search the web.
+- Keep the answer in the same language as the user's question,
+  unless the user asks otherwise.
+
+User question:
+{question}
+
+Answer:
+"""
+
+    response = llm.invoke(prompt)
+
+    content = (
+        response.content
+        if hasattr(response, "content")
+        else str(response)
+    )
+
+    return {
+        "messages": [AIMessage(content=content)]
+    }

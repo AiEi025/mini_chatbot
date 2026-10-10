@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 
 class Router_state(TypedDict):
-    state:Literal['python','planning','tools']
+    state:Literal['python','planning','tools','general']
 class Planning_state(TypedDict):
     status: bool
     feedback:str 
@@ -45,8 +45,9 @@ class Graph_state(BaseModel):
     status: Literal[
         "python",
         "planning",
-        "tools"
-    ] = "tools"
+        "tools",
+        'general'
+    ] = 'general'
 
     validation: bool = True
     validation_feedback: str = ""
