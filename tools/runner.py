@@ -7,9 +7,33 @@ sys.path.insert(
     0,
     str(Path(__file__).resolve().parent.parent)
 )
+import asyncio
+import threading
+
 from graph.graph import graph
 from graph.state import Graph_state
 
+
+class AsyncRunner:
+    def __init__(self):
+        self.loop = asyncio.new_event_loop()
+
+        self.thread = threading.Thread(
+            target=self._run_loop,
+            daemon=True,
+        )
+        self.thread.start()
+
+    def _run_loop(self):
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_forever()
+
+    def run(self, coro):
+        future = asyncio.run_coroutine_threadsafe(
+            coro,
+            self.loop,
+        )
+        return future.result()
 
 async def run_graph(user_input: str):
     initial_state = Graph_state(

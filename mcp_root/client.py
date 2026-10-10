@@ -65,10 +65,13 @@ skills_middleware = SkillsMiddleware(
 )
 
 async def main():
-    async with  MCPAdapter("http://localhost:8050/mcp") as adapter:
+    # async with  MCPAdapter("http://localhost:8050/mcp") as adapter:
         
-        tools = await adapter.list_tools()
-        return tools
+    #     tools = await adapter.list_tools()
+    #     return tools
+    adapter = MCPAdapter("http://localhost:8050/mcp")
+    tools = await adapter.list_tools()
+    return tools , adapter
 
         # for tool in tools:
         #     print(tool.name)

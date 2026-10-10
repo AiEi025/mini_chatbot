@@ -18,11 +18,12 @@ from tools.python_validator import PythonValidator
 
 load_dotenv()
 py_collection = Path(__file__).resolve().parent.parent /'py_collection.json'
-mcp_tools = asyncio.run(main())
+mcp_tools , mcp_adapter = asyncio.run(main())
+print(mcp_adapter.client)
 # tool_node = ToolNode(mcp_tools)
 def router_node(g_state:state.Graph_state)->state.Graph_state:
     question = g_state.question
-    llm = Llm_model('deepseek-v4-flash').chose_model().with_structured_output(state.Router_state, method="json_mode")
+    llm = Llm_model('openrouter').chose_model().with_structured_output(state.Router_state, method="json_mode")
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
@@ -61,7 +62,7 @@ def route_decision(g_state:state.Graph_state)->str:
         return 'plan'
     else:
         raise KeyError()
-python_agent = CustomAgent(model=Llm_model("deepseek-v4-flash",0).chose_model(),
+python_agent = CustomAgent(model=Llm_model("openrouter",0).chose_model(),
                            agent_type='d_agent',
                            skill_path=base_dir,
                            workspace_path=workspace_dir/'python/')
@@ -290,7 +291,7 @@ def cond_planning(g_state:state.Graph_state)->str:
         return 'end'
     return 'planning_node'
 
-tool_agent = CustomAgent(model=Llm_model('deepseek-v4-flash' , 0.3).chose_model(),
+tool_agent = CustomAgent(model=Llm_model('openrouter' , 0.3).chose_model(),
                          agent_type='l_agent',
                          tools=mcp_tools,
                          sysprompt=None)
@@ -410,7 +411,7 @@ Return:
 Do not mark an answer as invalid merely because no tool was used.
 Judge whether the agent's behavior was appropriate for the user's request.
 """
-    llm = Llm_model('deepseek-v4-flash',0).chose_model().with_structured_output(state.ToolValidationState)
+    llm = Llm_model('openrouter',0).chose_model().with_structured_output(state.ToolValidationState , method='function_calling')
     result = llm.invoke(prompt)
     if g_state.retry.exhausted:
         return{'validation_feedback':result.feedback , 'validation':True}
