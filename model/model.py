@@ -18,6 +18,17 @@ class Llm_model:
     model="openrouter/free",
     temperature=self.temperature,
     timeout= 30)
+        
+        elif self.model_name.lower() == 'toptool':
+            return ChatOpenAI(
+                api_key=os.environ.get("TOPTOOLS_API_KEY"),
+                base_url="https://top-tools-ai.com/api/v1",
+                temperature=self.temperature,
+                model='Top-Tools-Ai',
+                timeout= 120,
+                max_retries=3
+                
+            )
              
         return ChatOpenAI(
     model=self.model_name,

@@ -35,7 +35,7 @@ class AsyncRunner:
         )
         return future.result()
 
-async def run_graph(user_input: str , thread_id:str):
+async def run_graph(user_input: str, thread_id: str):
     initial_state = Graph_state(
         messages=[
             HumanMessage(content=user_input)
@@ -49,9 +49,25 @@ async def run_graph(user_input: str , thread_id:str):
         }
     }
 
+    # بررسی وضعیت قبل از اجرای درخواست جدید
+    # previous = await graph.aget_state(config)
+
+    # print("\n--- PREVIOUS CHECKPOINT ---")
+    print("Thread ID:", thread_id)
+    # print("Previous messages:")
+
+    # for message in previous.values.get("messages", []):
+    #     print(message.type, repr(message.content))
+
     result = await graph.ainvoke(
         initial_state,
         config=config
     )
+
+    print("\n--- RESULT AFTER INVOKE ---")
+    print("Total messages:", len(result.get("messages", [])))
+
+    for message in result.get("messages", []):
+        print(message.type, repr(message.content))
 
     return result
