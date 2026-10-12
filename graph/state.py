@@ -10,6 +10,8 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 from pydantic import BaseModel
 
+from counting.counting import RetryContext
+
 
 class Router_state(TypedDict):
     state:Literal['python','planning','tools','general']
@@ -19,23 +21,7 @@ class Planning_state(TypedDict):
 class ToolValidationState(BaseModel):
     status: bool
     feedback: str
-class RetryContext(BaseModel):
-    attempts_used: int = 0
-    max_attempts: int = 3
 
-    @property
-    def can_retry(self) -> bool:
-        return self.attempts_used < self.max_attempts
-    @property
-    def exhausted(self) -> bool:
-        return self.attempts_used >= self.max_attempts
-
-    def record_attempt(self) -> "RetryContext":
-        return self.model_copy(
-            update={
-                "attempts_used": self.attempts_used + 1
-            }
-        )
 
 class Graph_state(BaseModel):
     messages: Annotated[list[BaseMessage], add_messages]

@@ -12,6 +12,7 @@ import threading
 
 from graph.graph import graph
 from graph.state import Graph_state
+from counting.counting import RetryContext
 
 
 class AsyncRunner:
@@ -41,7 +42,8 @@ async def run_graph(user_input: str, thread_id: str):
             HumanMessage(content=user_input)
         ],
         question=user_input,
-        thread_id=thread_id
+        thread_id=thread_id,
+        retry=RetryContext()
     )
 
     config = {

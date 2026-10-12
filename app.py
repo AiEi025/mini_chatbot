@@ -640,53 +640,52 @@ input_col, attach_col = st.columns(
     vertical_alignment="bottom",
 )
 
-with attach_col:
-    with st.popover("📎", use_container_width=True):
-        st.markdown("**فایل این گفتگو**")
+with attach_col, st.popover("📎", use_container_width=True):
+    st.markdown("**فایل این گفتگو**")
 
-        upload_file = st.file_uploader(
-            "فایل موردنظر را انتخاب کن",
-            type=["txt", "pdf", "md", "py"],
-            key=f"chat_upload_{active_chat_id}",
-            help=(
-                "PDF و TXT برای RAG، فایل MD برای مهارت‌ها "
-                "و PY برای کار با کد."
-            ),
-            label_visibility="collapsed",
+    upload_file = st.file_uploader(
+        "فایل موردنظر را انتخاب کن",
+        type=["txt", "pdf", "md", "py"],
+        key=f"chat_upload_{active_chat_id}",
+        help=(
+            "PDF و TXT برای RAG، فایل MD برای مهارت‌ها "
+            "و PY برای کار با کد."
+        ),
+        label_visibility="collapsed",
+    )
+
+    if upload_file is not None:
+        file_bytes = upload_file.getvalue()
+        upload_hash = hashlib.sha256(
+            file_bytes
+        ).hexdigest()
+
+        if active_chat.get("file_hash") != upload_hash:
+            try:
+                with st.spinner("در حال آماده‌سازی فایل..."):
+                    file_manager.index_file(
+                        upload_file=upload_file,
+                        thread_id=active_chat_id
+                    )
+
+                active_chat["file_hash"] = upload_hash
+                active_chat["file_name"] = upload_file.name
+
+                st.success(
+                    f"فایل آماده شد: {upload_file.name}"
+                )
+
+            except Exception as exc:
+                st.error(
+                    f"خطا در آماده‌سازی فایل: {exc}"
+                )
+
+    if active_chat.get("file_name"):
+        st.caption(
+            f"فایل فعال: {active_chat['file_name']}"
         )
-
-        if upload_file is not None:
-            file_bytes = upload_file.getvalue()
-            upload_hash = hashlib.sha256(
-                file_bytes
-            ).hexdigest()
-
-            if active_chat.get("file_hash") != upload_hash:
-                try:
-                    with st.spinner("در حال آماده‌سازی فایل..."):
-                        file_manager.index_file(
-                            upload_file=upload_file,
-                            thread_id=active_chat_id
-                        )
-
-                    active_chat["file_hash"] = upload_hash
-                    active_chat["file_name"] = upload_file.name
-
-                    st.success(
-                        f"فایل آماده شد: {upload_file.name}"
-                    )
-
-                except Exception as exc:
-                    st.error(
-                        f"خطا در آماده‌سازی فایل: {exc}"
-                    )
-
-        if active_chat.get("file_name"):
-            st.caption(
-                f"فایل فعال: {active_chat['file_name']}"
-            )
-        else:
-            st.caption("هنوز فایلی انتخاب نشده است.")
+    else:
+        st.caption("هنوز فایلی انتخاب نشده است.")
 
 
 with input_col:
