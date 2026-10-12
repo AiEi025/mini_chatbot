@@ -43,8 +43,8 @@ builder.add_conditional_edges('tools_validate', node.cond_tools,  {'end': END, '
 
 graph = builder.compile(checkpointer=checkpointer)
 
-
-try:
-    graph.get_graph().draw_mermaid_png(output_file_path='./graph_nodes.png')
-except Exception as e:
-    print(f'رسم گراف ناموفق بود: {e}')
+if Path('./graph_nodes.png').exists() == False:
+    try:
+        graph.get_graph().draw_mermaid_png(output_file_path='./graph_nodes.png')
+    except Exception as e:
+        print(f'رسم گراف ناموفق بود: {e}')

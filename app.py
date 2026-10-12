@@ -7,7 +7,6 @@ from langchain_core.messages import AIMessage
 from file_manager.file_manager import File_Manager
 from tools.runner import AsyncRunner, run_graph
 
-
 # ============================================================
 # APP CONFIGURATION
 # ============================================================
@@ -666,7 +665,8 @@ with attach_col:
                 try:
                     with st.spinner("در حال آماده‌سازی فایل..."):
                         file_manager.index_file(
-                            upload_file=upload_file
+                            upload_file=upload_file,
+                            thread_id=active_chat_id
                         )
 
                     active_chat["file_hash"] = upload_hash

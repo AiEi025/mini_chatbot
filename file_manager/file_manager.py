@@ -1,5 +1,4 @@
 import hashlib
-import json
 import sys
 from pathlib import Path
 
@@ -7,13 +6,14 @@ sys.path.insert(
     0,
     str(Path(__file__).resolve().parent.parent)
 )
-
 from langchain_chroma import Chroma
 from langchain_community.document_loaders.parsers import PyPDFParser
 from langchain_core.documents import Document
 from langchain_core.documents.base import Blob
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+from file_manager.tools import collection
 
 
 class File_Manager:
@@ -46,7 +46,7 @@ class File_Manager:
             chunk_overlap=50
         )
 
-    def index_file(self, upload_file):
+    def index_file(self, upload_file , thread_id:str ):
 
         """
         دریافت فایل Streamlit و ساخت Vector Store
@@ -113,19 +113,16 @@ class File_Manager:
         
             elif "plan" in safe_name.stem.lower():
                 skill_dir = self.SKILLS_DIR / "daily-planner"
-        
+
             else:
-                raise ValueError(
-                    "Markdown file must contain 'python' or 'plan' in its name."
-                )
+                skill_dir = self.SKILLS_DIR /"general"
         
             skill_dir.mkdir(
                 parents=True,
                 exist_ok=True
             )
-        
             dest = skill_dir / safe_name
-        
+
             if dest.exists():
             
                 file_hash = hashlib.md5(
@@ -141,7 +138,7 @@ class File_Manager:
             )
         elif suffix == '.py':
             safe_name = Path(upload_file_name)
-            workspace_dir = self.WORKSPACE / "python"
+            workspace_dir = self.WORKSPACE / thread_id / "python"
             workspace_dir.mkdir(parents=True ,exist_ok=True)
             dest = workspace_dir / safe_name
             if dest.exists():
@@ -152,53 +149,49 @@ class File_Manager:
                 dest = workspace_dir / (
                                     f"{dest.stem}_{file_hash}{dest.suffix}"
                                 )
-                with open(self.PYTHON_COLLECTION, 'w', encoding='utf-8') as w:
-                    json.dump({"collection_name": dest.stem+dest.suffix}, w)
+                collection(collection_name=self.PYTHON_COLLECTION , dest=dest , thread_id=thread_id)
+                
             else:
-                with open(self.PYTHON_COLLECTION, 'w', encoding='utf-8') as w:
-                    json.dump({"collection_name": dest.stem+dest.suffix}, w)
+                collection(collection_name=self.PYTHON_COLLECTION , dest=dest , thread_id=thread_id)
                     
             dest.write_bytes(
                              upload_file_getvalue
                             )
-            
         
         else:pass
 
         # --------------------------------
         # Split Documents
         # --------------------------------
-        if suffix == '.pdf' or suffix =='.txt':
-            all_chunks = self.text_splitter.split_documents(
-                docs
-            )
-
-        # --------------------------------
-        # Collection name
-        # --------------------------------
-
-            collection_name = Path(
-                upload_file_name
-            ).stem
-            
+        if suffix == '.pdf' or suffix == '.txt':
+            all_chunks = self.text_splitter.split_documents(docs)
+        
+            # --------------------------------
+            # Collection name
+            # --------------------------------
+            collection_name = Path(upload_file_name).stem
+        
             path_collection = self.PATH_COLLECTION
-            with open(path_collection, 'w', encoding='utf-8') as w:
-                json.dump({"collection_name": collection_name}, w)
-        # --------------------------------
-        # Create / Load Chroma
-        # --------------------------------
-
-            collection_path = (
-                self.CHROMA_DIR / collection_name
-            )
-
-            if not collection_path.exists():
+            collection(collection_name=path_collection, dest=collection_name, thread_id=thread_id)
+        
+            # --------------------------------
+            # Create / Load Chroma
+            # --------------------------------
+            collection_path = self.CHROMA_DIR / thread_id / collection_name
+            collection_path.mkdir(parents=True, exist_ok=True)
+        
+            # اگر پوشه خالی بود → کالکشن جدید بساز
+            if not any(collection_path.iterdir()):
                 self.vectorstore = Chroma.from_documents(
-                                    embedding=self.embeddings,
-                                    documents=all_chunks,
-                                    persist_directory=str(
-                                        self.CHROMA_DIR
-                                    ),
-                                    collection_name=collection_name,
-                                )
-            else:pass
+                    documents=all_chunks,
+                    embedding=self.embeddings,
+                    persist_directory=str(collection_path),
+                    collection_name=collection_name,
+                )
+            else:
+                # اگر از قبل وجود داشت → لود کن
+                self.vectorstore = Chroma(
+                    persist_directory=str(collection_path),
+                    embedding_function=self.embeddings,
+                    collection_name=collection_name,
+                )

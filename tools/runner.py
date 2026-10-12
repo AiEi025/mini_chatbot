@@ -41,6 +41,7 @@ async def run_graph(user_input: str, thread_id: str):
             HumanMessage(content=user_input)
         ],
         question=user_input,
+        thread_id=thread_id
     )
 
     config = {

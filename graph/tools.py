@@ -1,12 +1,18 @@
 # python package tools
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
 from deepagents.middleware.skills import SkillsMiddleware
 from langchain.agents import create_agent
+from langchain.tools import InjectedToolArg, tool
+from langchain_core.tools import StructuredTool
 from langgraph.checkpoint.memory import MemorySaver
+
+from tools.rag import RAG
+
+rag =RAG()
 
 # read_only_rules = [
 #     FilesystemPermission(
@@ -83,3 +89,78 @@ def extract_tool_calls(messages):
             tool_calls.extend(calls)
 
     return tool_calls
+
+@tool
+def files_rag(
+    query: str,
+    thread_id: Annotated[str, InjectedToolArg],   # ← agent نمی‌بیندش
+) -> str:
+    """Search the content of the file currently uploaded and indexed
+    by the user for THIS chat.
+
+    Use this tool when:
+    - The user asks about information contained in their uploaded file.
+    - The user asks to summarize, explain, compare, or extract
+      information from the uploaded document.
+    - The answer should be grounded in the uploaded document.
+    - The user refers to "my file", "the document", "the PDF",
+      "the uploaded text", or similar.
+
+    Do NOT use this tool for:
+    - General knowledge questions.
+    - Current or up-to-date information.
+    - Web research.
+    - Questions unrelated to the uploaded file.
+    - Math, code writing, or tasks that don't require document content.
+
+    For current or external information, use web search instead.
+
+    Args:
+        query: A focused question or search query about the uploaded file.
+            Keep it short and specific. Example: "return policy for
+            damaged items" instead of "tell me everything about returns".
+
+    Returns:
+        The most relevant passages retrieved from the uploaded file,
+        separated by "---". If no relevant content is found, returns
+        an empty string.
+    """
+    return rag.find_retrieve(query=query, thread_id=thread_id)
+
+def make_rag_tool(thread_id: str) -> StructuredTool:
+    """Build a RAG tool bound to a specific chat thread."""
+
+    def _rag(query: str) -> str:
+        """Search the content of the file currently uploaded and indexed
+        by the user for THIS chat.
+
+        Use this tool when:
+        - The user asks about information contained in their uploaded file.
+        - The user asks to summarize, explain, compare, or extract
+          information from the uploaded document.
+        - The answer should be grounded in the uploaded document.
+        - The user refers to "my file", "the document", "the PDF",
+          "the uploaded text", or similar.
+
+        Do NOT use this tool for:
+        - General knowledge questions.
+        - Current or up-to-date information.
+        - Web research.
+        - Questions unrelated to the uploaded file.
+        - Math, code writing, or tasks that don't require document content.
+
+        For current or external information, use web search instead.
+
+        Args:
+            query: A focused question or search query about the uploaded file.
+
+        Returns:
+            The most relevant passages retrieved from the uploaded file.
+        """
+        return rag.find_retrieve(query=query, thread_id=thread_id)
+
+    return StructuredTool.from_function(
+        func=_rag,
+        name="files_rag",
+        description=_rag.__doc__,
+    )

@@ -8,15 +8,14 @@ sys.path.insert(
 )
 
 from langchain_chroma import Chroma
+from langchain_classic.retrievers import EnsembleRetriever
 from langchain_huggingface import HuggingFaceEmbeddings
 
 
 class RAG:
 
     def __init__(self):
-        self.BASE_DIR = Path(__file__).resolve().parent.parent
-        # مسیر Chroma
-        self.CHROMA_DIR = self.BASE_DIR / ".chroma_db"
+        self.BASEPATH = Path(__file__).resolve().parent.parent / ".chroma_db"
         self.PATH_COLLECTION = Path("./collection.json")
 
         # Retriever در ابتدا وجود ندارد
@@ -30,28 +29,43 @@ class RAG:
             }
         )
 
-    def find_retrieve(self, query: str) -> str:
-        path_collection = self.PATH_COLLECTION
-        with open(path_collection, 'r', encoding='utf-8') as r:
+    def find_retrieve(self, query: str, thread_id: str) -> str:
+    
+        with open(self.PATH_COLLECTION, 'r', encoding='utf-8') as r:
             data = json.load(r)
-        self.vectorstore = Chroma(
-                            embedding_function=self.embeddings,
-                            persist_directory=str(
-                                self.CHROMA_DIR
-                            ),
-                            collection_name=data['collection_name'],
-                        )
-        self.retriever = (
-                        self.vectorstore.as_retriever(
-                            search_kwargs={
-                                "k": 3
-                            }
-                        )
-                    )
-
-        docs = self.retriever.invoke(query)
-
-        return "\n\n---\n\n".join(
-            doc.page_content
-            for doc in docs
+    
+        collection_names = data.get(thread_id, [])
+    
+        if not collection_names:
+            return "هیچ فایلی برای این گفتگو یافت نشد."
+    
+        retrievers = []
+        for name in collection_names:
+            collection_path = self.BASEPATH / thread_id / name
+    
+            # اگر پوشه کالکشن وجود نداشت، رد شو
+            if not collection_path.exists():
+                continue
+            
+            vectorstore = Chroma(
+                embedding_function=self.embeddings,
+                persist_directory=str(collection_path),
+                collection_name=name,
+            )
+            retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+            retrievers.append(retriever)
+    
+        if not retrievers:
+            return "هیچ دادهٔ قابل بازیابی‌ای پیدا نشد."
+    
+        # ادغام چندین Retriever
+        ensemble = EnsembleRetriever(
+            retrievers=retrievers,
+            weights=[1.0] * len(retrievers)   # وزن مساوی (می‌توانی بعداً تنظیم کنی)
         )
+    
+        docs = ensemble.invoke(query)
+        docs = docs[:5]
+    
+        return "\n\n---\n\n".join(doc.page_content for doc in docs)
+    

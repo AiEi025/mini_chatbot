@@ -4,10 +4,20 @@ from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 
 
+# مقدار درخواستی	رفتار واقعی مدل
+# "none"	حالت thinking را کاملاً خاموش می‌کند
+# "minimal"	به low نگاشت می‌شود
+# "low"	low (سبک‌ترین حالت thinking)
+# "medium"	به high نگاشت می‌شود
+# "high"	high (پیش‌فرض)
+# "xhigh"	به high نگاشت می‌شود
+# "max"	max (سنگین‌ترین حالت thinking)
+# "ultra"	به max نگاشت می‌شود
 class Llm_model:
-    def __init__(self , model_name:str , temperature:float = 0.3):
+    def __init__(self , model_name:str,reasoning_effort:str ="high", temperature:float = 0.3 ):
         self.model_name = model_name
         self.temperature = temperature
+        self.reasoning_effort = reasoning_effort
         load_dotenv()
     
     def chose_model(self):
@@ -44,6 +54,7 @@ class Llm_model:
         "X-Stainless-Arch": "x64",
         "X-Stainless-OS": "Windows",
         "X-Stainless-Lang": "js",
-    }
+    },
+    reasoning_effort=self.reasoning_effort
 )
     
