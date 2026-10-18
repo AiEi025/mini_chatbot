@@ -2,9 +2,10 @@ import hashlib
 import uuid
 
 import streamlit as st
-from langchain_core.messages import AIMessage
-
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.prompts import ChatPromptTemplate
 from file_manager.file_manager import File_Manager
+from model.model import Llm_model
 from tools.runner import AsyncRunner, run_graph
 
 # ============================================================
@@ -489,36 +490,97 @@ file_manager = get_file_manager()
 
 
 # ============================================================
-# SESSION STATE
+# SESSION STATE + DATABASE
 # ============================================================
 
-def create_chat():
+def create_new_chat():
     chat_id = str(uuid.uuid4())
 
-    st.session_state.chats[chat_id] = {
-        "title": "گفتگوی جدید",
-        "messages": [],
-        "file_name": None,
-        "file_hash": None,
-    }
+    runner.run(
+        runner.create_chat(
+            thread_id=chat_id,
+            first_message="گفتگوی جدید",
+        )
+    )
 
     st.session_state.active_chat_id = chat_id
+    st.rerun()
 
 
-if "chats" not in st.session_state:
-    st.session_state.chats = {}
+def load_chats():
+    db_chats = runner.run(runner.list_chats())
 
-for chat in st.session_state.chats.values():
-    chat.setdefault("file_name", None)
-    chat.setdefault("file_hash", None)
-    chat.setdefault("messages", [])
-    chat.setdefault("title", "گفتگوی جدید")
+    # اطلاعات محلی فایل‌ها را تا حد ممکن نگه می‌داریم.
+    previous_chats = st.session_state.get("chats", {})
+    chats = {}
 
-if "active_chat_id" not in st.session_state:
-    create_chat()
+    for row in db_chats:
+        chat_id = str(row["thread_id"])
+        old_chat = previous_chats.get(chat_id, {})
 
-if st.session_state.active_chat_id not in st.session_state.chats:
-    create_chat()
+        chats[chat_id] = {
+            "title": row["title"],
+            "messages": [],
+            "file_name": old_chat.get("file_name",""),
+            "file_hash": old_chat.get("file_hash",""),
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+
+    st.session_state.chats = chats
+
+
+def load_chat_messages(chat_id):
+    db_messages = runner.run(
+        runner.get_chat_messages(chat_id)
+    )
+
+    messages = []
+
+    for message in db_messages:
+        if isinstance(message, HumanMessage):
+            messages.append({
+                "role": "user",
+                "content": message.content,
+            })
+
+        elif isinstance(message, AIMessage):
+            # پیام‌های میانی دارای tool_calls را در تاریخچه
+            # معمولی نمایش نمی‌دهیم.
+            if getattr(message, "tool_calls", None):
+                continue
+
+            if isinstance(message.content, str) and message.content.strip():
+                messages.append({
+                    "role": "assistant",
+                    "content": message.content,
+                })
+
+    return messages
+
+
+# بارگذاری چت‌ها از PostgreSQL در هر rerun
+load_chats()
+
+# اگر هنوز چتی نداریم، یک چت جدید بساز.
+if not st.session_state.chats:
+    create_new_chat()
+
+# اگر چت فعال حذف شده یا وجود ندارد، اولین چت فعال را انتخاب کن.
+if (
+    st.session_state.get("active_chat_id")
+    not in st.session_state.chats
+):
+    st.session_state.active_chat_id = next(
+        iter(st.session_state.chats)
+    )
+
+# پیام‌های چت انتخاب‌شده را از Checkpointer بازیابی کن.
+active_chat_id = st.session_state.active_chat_id
+
+st.session_state.chats[active_chat_id]["messages"] = (
+    load_chat_messages(active_chat_id)
+)
 
 
 # ============================================================
@@ -557,39 +619,58 @@ with st.sidebar:
         use_container_width=True,
         type="primary",
     ):
-        create_chat()
-        st.rerun()
+        create_new_chat()
 
     st.divider()
-
     st.markdown("### تاریخچه گفتگو")
 
-    for chat_id, chat in reversed(
-        list(st.session_state.chats.items())
-    ):
+    for chat_id, chat in st.session_state.chats.items():
         title = chat["title"].strip() or "گفتگوی جدید"
 
         if len(title) > 30:
             title = title[:30] + "…"
 
-        is_active = (
-            chat_id == st.session_state.active_chat_id
-        )
+        is_active = chat_id == st.session_state.active_chat_id
 
-        button_label = (
-            f"●  {title}" if is_active
-            else f"💬  {title}"
-        )
+        # دکمه‌ی انتخاب چت + دکمه‌ی حذف
+        chat_col, delete_col = st.columns([5, 1])
 
-        if st.button(
-            button_label,
-            key=f"chat_{chat_id}",
-            use_container_width=True,
-            type="primary" if is_active else "secondary",
-        ):
-            st.session_state.active_chat_id = chat_id
-            st.rerun()
+        with chat_col:
+            button_label = (
+                f"●  {title}" if is_active
+                else f"💬  {title}"
+            )
 
+            if st.button(
+                button_label,
+                key=f"chat_{chat_id}",
+                use_container_width=True,
+                type="primary" if is_active else "secondary",
+            ):
+                st.session_state.active_chat_id = chat_id
+                st.rerun()
+
+        with delete_col:
+            if st.button(
+                "🗑️",
+                key=f"delete_{chat_id}",
+                help="حذف گفتگو از فهرست",
+            ):
+                runner.run(runner.delete_chat(chat_id))
+
+                # فهرست را دوباره از دیتابیس بخوان.
+                load_chats()
+
+                if chat_id == st.session_state.active_chat_id:
+                    if st.session_state.chats:
+                        st.session_state.active_chat_id = next(
+                            iter(st.session_state.chats)
+                        )
+                    else:
+                        # اگر آخرین چت حذف شد، چت جدید بساز.
+                        create_new_chat()
+
+                st.rerun()
 
 # ============================================================
 # ACTIVE CHAT
@@ -626,8 +707,7 @@ st.markdown(
 for message in active_chat["messages"]:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-
-
+        
 # ============================================================
 # ATTACHMENT + CHAT INPUT
 # ============================================================
@@ -706,12 +786,36 @@ if prompt:
             "content": prompt,
         }
     )
+    title_prompt = f"""Based on the user's message, create a short, precise, and relevant title for this conversation.
+    Rules:
+    - The title must reflect the main topic of the message.
+    - Write the title in the same language as the user's message.
+    - Keep it to a maximum of 6 to 8 words.
+    - Provide only the title itself; no explanations, introductions, quotation marks, or extra symbols.
+    - If the message is a question, briefly state the subject of the question.
+    - Avoid generic titles like "New Conversation" or "Assisting the User."
 
-    if active_chat["title"] == "گفتگوی جدید":
-        active_chat["title"] = (
-            prompt.strip().replace("\n", " ")[:32]
-            or "گفتگوی جدید"
+    User Message:
+    {prompt}
+    """
+    llm = Llm_model('openrouter').chose_model()
+    c_prompt = ChatPromptTemplate.from_template("{title_prompt}")
+    chain = c_prompt | llm
+    generated_title = chain.invoke({ "title_prompt": title_prompt }).content.strip()
+    # عنوان چت از اولین پیام ساخته می‌شود.
+    # این متد برای چت موجود نیز فراخوانی می‌شود؛
+    # اما فقط اگر عنوان هنوز «گفتگوی جدید» باشد، تغییر می‌کند.
+    runner.run(
+        runner.create_chat(
+            thread_id=active_chat_id,
+            first_message=generated_title,
         )
+    )
+
+    active_chat["title"] = (
+        prompt.strip().replace("\n", " ")[:80]
+        or "گفتگوی جدید"
+    )
 
     with st.chat_message("user"):
         st.markdown(prompt)
@@ -723,7 +827,7 @@ if prompt:
                     run_graph(
                         user_input=prompt,
                         thread_id=active_chat_id,
-                        graph=runner.graph
+                        graph=runner.graph,
                     )
                 )
 
@@ -751,7 +855,11 @@ if prompt:
                 }
             )
 
+            # زمان آخرین فعالیت را در دیتابیس به‌روز کن.
+            runner.run(
+                runner.update_chat_activity(active_chat_id)
+            )
+
         except Exception as exc:
             st.error("هنگام اجرای Agent خطایی رخ داد.")
             st.exception(exc)
-
