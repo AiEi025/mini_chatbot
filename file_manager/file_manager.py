@@ -33,19 +33,29 @@ class File_Manager:
         self.PYTHON_COLLECTION = Path("./py_collection.json")
 
         # Embedding model
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-mpnet-base-v2",
-            encode_kwargs={
-                "normalize_embeddings": True
-            }
-        )
+        self._embeddings =None
+        # HuggingFaceEmbeddings(
+        #     model_name="sentence-transformers/all-mpnet-base-v2",
+        #     encode_kwargs={
+        #         "normalize_embeddings": True
+        #     }
+        # )
 
         # Text splitter
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=500,
             chunk_overlap=50
         )
-
+    @property
+    def embeddings(self):
+        if self._embeddings is None:
+            from langchain_huggingface import HuggingFaceEmbeddings
+            self._embeddings = HuggingFaceEmbeddings(
+                model_name="sentence-transformers/all-mpnet-base-v2",
+                model_kwargs={"local_files_only": True},  # جلوگیری از چک آنلاین
+                encode_kwargs={"normalize_embeddings": True},
+            )
+        return self._embeddings
     def index_file(self, upload_file , thread_id:str ):
 
         """

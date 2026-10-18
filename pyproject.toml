@@ -20,7 +20,10 @@ dependencies = [
     "langchain-openai>=1.6.7",
     "langchain-text-splitters>=1.1.2",
     "langgraph>=1.2.12",
+    "langgraph-checkpoint-postgres>=3.2.0",
+    "psycopg[binary,pool]>=3.3.6",
     "pypdf>=6.19.0",
+    "python-dotenv>=1.2.4",
     "sentence-transformers>=6.1.0",
     "streamlit>=1.64.0",
 ]

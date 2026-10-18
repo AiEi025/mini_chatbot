@@ -723,6 +723,7 @@ if prompt:
                     run_graph(
                         user_input=prompt,
                         thread_id=active_chat_id,
+                        graph=runner.graph
                     )
                 )
 

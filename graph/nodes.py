@@ -33,7 +33,7 @@ ROUTER_LLM = 'deepseek-v4-flash'
 mcp_tools, _ = asyncio.run(main())
 def router_node(g_state:state.Graph_state)->state.Graph_state:
     question = g_state.question
-    llm = Llm_model(model_name=VALIDAION_LLM).chose_model().with_structured_output(state.Router_state, method="json_mode")
+    llm = Llm_model(model_name=VALIDAION_LLM ,reasoning_effort='none').chose_model().with_structured_output(state.Router_state, method="json_mode")
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
