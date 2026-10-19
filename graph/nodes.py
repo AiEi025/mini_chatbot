@@ -11,6 +11,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 #from functools import lru_cache  #,partial
 
+from typing import Literal
+
 from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
@@ -32,13 +34,95 @@ VALIDAION_LLM = 'deepseek-v4-flash'
 GENERATE_LLM = 'deepseek-v4-flash'
 ROUTER_LLM = 'deepseek-v4-flash'
 
-class UserMemory(BaseModel):
-    facts: list[str] = Field(
-        description=(
-            "Stable and useful facts about the user, "
-            "their preferences, skills, and long-term goals."
-        )
+class MemoryChange(BaseModel):
+    action: Literal["set", "add", "remove"] = Field(
+        description="The type of memory change"
     )
+
+    field: Literal[
+        "name",
+        "occupation",
+        "language",
+        "response_style",
+        "skills",
+        "goals",
+        "projects",
+        "other",
+    ] = Field(
+        description="The profile field to update"
+    )
+
+    value: str = Field(
+        description="The value to set, add, or remove"
+    )
+
+
+class MemoryUpdate(BaseModel):
+    changes: list[MemoryChange] = Field(
+        description="Only changes justified by the user's latest message"
+    )
+    
+def apply_memory_changes(
+    profile: dict,
+    changes: list[MemoryChange],
+) -> dict:
+    scalar_fields = {
+        "name",
+        "occupation",
+        "language",
+        "response_style",
+    }
+
+    list_fields = {
+        "skills",
+        "goals",
+        "projects",
+        "other",
+    }
+
+    for change in changes:
+        field = change.field
+        value = change.value.strip()
+
+        if not value:
+            continue
+
+        if field in scalar_fields:
+            if change.action == "set":
+                profile[field] = value
+
+            # حذف فیلدهای تک‌مقداری را فعلاً پشتیبانی نمی‌کنیم.
+            continue
+
+        if field in list_fields:
+            items = profile.setdefault(field, [])
+
+            if change.action == "add":
+                if value.casefold() not in {
+                    item.casefold() for item in items
+                }:
+                    items.append(value)
+
+            elif change.action == "remove":
+                profile[field] = [
+                    item
+                    for item in items
+                    if item.casefold() != value.casefold()
+                ]
+
+    return profile
+
+def empty_profile() -> dict:
+    return {
+        "name": "",
+        "occupation": "",
+        "language": "",
+        "response_style": "",
+        "skills": [],
+        "goals": [],
+        "projects": [],
+        "other": [],
+    }
     
 mcp_tools, _ = asyncio.run(main())
 
@@ -50,9 +134,21 @@ async def router_node(g_state:state.Graph_state,*,store)->dict:
         "profile",
     )
     if saved_memory is not None:
-        old_facts = saved_memory.value.get("facts", [])
+        stored_data = saved_memory.value
+
+        # سازگاری با حافظه قدیمی که {"facts": [...]} را ذخیره می‌کرد
+        if "facts" in stored_data:
+            old_facts = stored_data.get("facts", [])
+            profile = empty_profile()
+        else:
+            old_facts = []
+            profile = {
+                **empty_profile(),
+                **stored_data,
+            }
     else:
         old_facts = []
+        profile = empty_profile()
         
     memory_llm = (
         Llm_model(
@@ -60,73 +156,93 @@ async def router_node(g_state:state.Graph_state,*,store)->dict:
             reasoning_effort="none",
         )
         .chose_model()
-        .with_structured_output(UserMemory , method='json_mode')
+        .with_structured_output(MemoryUpdate , method='json_mode')
     )
     memory_prompt = ChatPromptTemplate.from_messages([
-        (
-            "system",
-            """
-            You maintain a long-term profile for an AI assistant.
+    (
+        "system",
+        """
+            You maintain a structured long-term user profile.
 
-            Your task is to extract useful information from the user's new message.
+            Analyze the latest user message and return only justified memory changes.
 
-            Save only reasonably stable and useful facts, such as:
-            - Occupation and skills
-            - Language and response-style preferences
-            - Long-term goals and ongoing projects
-            - Name, if explicitly stated
+            Profile fields:
+            - Single-value fields: "name", "occupation", "language", "response_style"
+            - List fields: "skills", "goals", "projects", "other"
 
             Rules:
-            - Do not treat questions as facts about the user.
+            - Save only useful, reasonably stable information about the user.
+            - Do not save temporary requests, entire code snippets, or unrelated details.
             - Do not infer personal facts without evidence.
-            - Do not save temporary requests or entire code snippets.
-            - Existing facts are provided for context.
-            - Return ONLY genuinely new facts that are not already represented in the existing profile.
-            - Do not repeat existing facts.
-            - If the user explicitly corrects an existing fact, return the corrected fact.
-            - If there is no useful new information, return an empty list.
+            - Do not treat questions, hypothetical examples, or quoted text as facts about the user.
+            - Only update the user's profile when the message provides clear evidence
+              about the user or explicitly corrects existing information.
+            - For a new or corrected single-value field, use "set".
+            - For a genuinely new list item, use "add".
+            - Use "remove" only when the user explicitly asks to remove information
+              or clearly retracts a previously stored fact.
+            - For single-value fields, the latest explicit correction should replace
+              the previous value.
+            - Do not add list items that are already represented in the profile.
+            - Do not change information merely because it is mentioned in a question.
+            - If the message contains no justified memory changes, return:
+              {{"changes": []}}
 
-            Return only a valid JSON object with exactly this structure:
-
+            Return ONLY a valid JSON object matching this structure:
             {{
-              "facts": ["fact 1", "fact 2"]
+              "changes": [
+                {{
+                  "action": "set",
+                  "field": "name",
+                  "value": "John"
+                }}
+              ]
             }}
 
-            Do not include markdown, explanations, or any other keys.
-            """
-        ),
-        (
-            "human",
-            """
-            Existing user profile (JSON array of facts):
+            The example above illustrates the structure only.
+            Use only the allowed action and field values defined below.
+
+            Allowed actions: "set", "add", "remove"
+            Allowed fields: "name", "occupation", "language", "response_style",
+            "skills", "goals", "projects", "other"
+
+            Each change must contain exactly these keys:
+            "action", "field", "value".
+
+            The value must be a string.
+
+            Do not include markdown, explanations, or additional keys.
+        """
+    ),
+    (
+        "human",
+        """
+            Current profile:
+            {profile}
+
+            Legacy facts from the previous memory format, if any:
             {old_facts}
 
-            New user message:
+            Latest user message:
             {question}
-            """
-        ),
-    ])
+        """
+    ),
+])
     
     memory_chain = memory_prompt | memory_llm
-    updated_memory = await memory_chain.ainvoke({
-        "old_facts": json.dumps(old_facts, ensure_ascii=False),
-        "question": question,
+    update = await memory_chain.ainvoke({
+    "profile": json.dumps(profile, ensure_ascii=False),
+    "old_facts": json.dumps(old_facts, ensure_ascii=False),
+    "question": question,
     })
-    new_facts = updated_memory.facts
-    merged_facts = old_facts.copy()
-    for fact in new_facts:
-        normalized_fact = fact.strip()
-
-        if normalized_fact and normalized_fact not in merged_facts:
-            merged_facts.append(normalized_fact)
+    profile = apply_memory_changes(profile, update.changes)
+    await store.aput(
+    namespace,
+    "profile",
+    profile,
+    )
     
-    if merged_facts != old_facts:
-        await store.aput(
-            namespace,
-            "profile",
-            {"facts": merged_facts},
-        )
-            
+                
     llm = Llm_model(model_name=VALIDAION_LLM ,reasoning_effort='none').chose_model().with_structured_output(state.Router_state, method="json_mode")
     prompt = ChatPromptTemplate.from_messages([
         (
@@ -162,9 +278,14 @@ async def router_node(g_state:state.Graph_state,*,store)->dict:
     chain = prompt | llm
     result = await chain.ainvoke({"question": question})    
     saved_memory = await store.aget(namespace, "profile")
-
-    memory_context = "\n".join(
-        f"- {fact}" for fact in merged_facts
+    if saved_memory is not None:
+        profile = saved_memory.value
+    else:
+        profile = empty_profile()
+    memory_context = json.dumps(
+    profile,
+    ensure_ascii=False,
+    indent=2,
     )
     return {
         "status": result['state'],
