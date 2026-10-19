@@ -314,23 +314,31 @@ def python_node(g_state:state.Graph_state)->state.Graph_state:
     question = g_state.question
     file_path =data['collection_name']
     validation = g_state.validation
+    memory_context = g_state.memory_context or 'not save profile information'
     if not file_path:
         raise ValueError("file_path is missing")
     if validation:
         prompt = f"""
-                    Fix the Python file.
-        
-                    User request:
-                    {question}
-        
-                    Target file:
-                    {file_path}
-        
-                    Read the file first.
-                    Analyze the problem.
-                    Fix the problem by editing the file.
-                    Do not modify unrelated files.
-                    """
+                Fix the Python file.
+
+                Relevant saved user profile:
+                {memory_context}
+
+                Use the saved profile only when it helps interpret the user's request.
+                The user's explicit request takes priority over saved preferences.
+                Do not infer code changes from the profile alone.
+
+                User request:
+                {question}
+
+                Target file:
+                {file_path}
+
+                Read the file first.
+                Analyze the problem.
+                Fix the problem by editing the file.
+                Do not modify unrelated files.
+                """
         
         result = python_agent.agent.invoke(
                 {
@@ -414,13 +422,15 @@ When the user asks for help planning their day:
 - Suggest breaks and buffer time between high-focus tasks.""")
 def planning_node(g_state:state.Graph_state)->state.Graph_state:
     validation = g_state.validation
+    memory_context = g_state.memory_context or 'not save profile information'
     if validation:
         question = g_state.question
         result = planning_agent.agent.invoke({
         "messages": [
                 {
                     "role": "user",
-                    "content": question
+                    "content": f"""Relevant saved user profile:{memory_context}
+                    and the question is :{question}"""
                 }
                 ]
             })
@@ -436,6 +446,12 @@ The previous planning result was:
 A planning critic reviewed it and provided this feedback:
 
 {feedback}
+
+Use relevant saved goals, projects, skills, and preferences
+to improve the plan when appropriate.
+
+Do not invent goals or assume that every saved goal is relevant.
+The user's current request takes priority over older preferences.
 
 Please revise the planning result according to the critic feedback.
 
@@ -458,64 +474,65 @@ def planning_validation(g_state:state.Graph_state)->state.Graph_state:
     question = g_state.question
     message = g_state.messages[-1].content
     prompt = f"""
-You are a strict but fair planning critic.
+        You are a strict but fair planning critic.
 
-Your task is to evaluate the generated plan against the user's
-original request and determine whether it is acceptable.
+        Your task is to evaluate the generated plan against the user's
+        original request and determine whether it is acceptable.
 
-User request:
-{question}
+        User request:
+        {question}
 
-Generated plan:
-{message}
+        Generated plan:
+        {message}
 
-Evaluate the plan using the following criteria:
+        Evaluate the plan using the following criteria:
 
-1. Goal alignment:
-   Does the plan address the user's actual request?
+        1. Goal alignment:
+           Does the plan address the user's actual request?
 
-2. Task coverage:
-   Does it include the important tasks and commitments mentioned
-   by the user?
+        2. Task coverage:
+           Does it include the important tasks and commitments mentioned
+           by the user?
 
-3. Logical ordering:
-   Are tasks arranged in a sensible order?
+        3. Logical ordering:
+           Are tasks arranged in a sensible order?
 
-4. Time feasibility:
-   Are the estimated durations and schedule realistic?
-   Are there any overlapping or conflicting commitments?
+        4. Time feasibility:
+           Are the estimated durations and schedule realistic?
+           Are there any overlapping or conflicting commitments?
 
-5. Constraint handling:
-   Does the plan respect the user's stated constraints,
-   preferences, and commitments?
+        5. Constraint handling:
+           Does the plan respect the user's stated constraints,
+           preferences, and commitments?
 
-6. Actionability:
-   Are the tasks specific enough for the user to follow?
+        6. Actionability:
+           Are the tasks specific enough for the user to follow?
 
-7. Missing information:
-   Does the plan make unsupported assumptions that could
-   significantly affect its feasibility?
+        7. Missing information:
+           Does the plan make unsupported assumptions that could
+           significantly affect its feasibility?
 
-Decision rules:
-- Set status=True if the plan is reasonably complete, feasible,
-  and aligned with the user's request.
-- Set status=False if there is a significant issue that makes
-  the plan incomplete, impractical, or inconsistent with the request.
-- Do not reject a plan for minor stylistic issues or reasonable
-  assumptions.
-- Do not invent requirements that the user did not mention.
-- If important information is missing, consider whether a
-  reasonable assumption would allow the plan to proceed.
-- If status=False, explain the specific problems and suggest
-  actionable improvements.
-- If status=True, provide brief feedback confirming that the
-  plan is acceptable and mention any important caveat, if needed.
+        Decision rules:
+        - Set status=True if the plan is reasonably complete, feasible,
+          and aligned with the user's request.
+        - Set status=False if there is a significant issue that makes
+          the plan incomplete, impractical, or inconsistent with the request.
+        - Do not reject a plan for minor stylistic issues or reasonable
+          assumptions.
+        - Do not invent requirements that the user did not mention.
+        - If important information is missing, consider whether a
+          reasonable assumption would allow the plan to proceed.
+        - If status=False, explain the specific problems and suggest
+          actionable improvements.
+        - If status=True, provide brief feedback confirming that the
+          plan is acceptable and mention any important caveat, if needed.
 
-Return the result using the provided structured output schema.
-The status field must be a boolean: true or false.
-The feedback field must be a concise, useful string.
-Do not include any text outside the structured output.
-"""
+        Return the result using the provided structured output schema.
+        The status field must be a boolean: true or false.
+        The feedback field must be a concise, useful string.
+        Your response must be in valid JSON format. 
+        Do not include any text outside the JSON.
+        """
 
 
     llm = Llm_model(model_name=VALIDAION_LLM).chose_model().with_structured_output(state.Planning_state, method="json_mode")
@@ -696,24 +713,32 @@ def general_node(g_state: state.Graph_state) -> dict:
         temperature=0.3,
         reasoning_effort='high'
     ).chose_model()
-
+    memory_context = g_state.memory_context or 'not save profile information'
     messages = [
-        SystemMessage(
-            content="""
+    SystemMessage(
+        content=f"""
 You are a helpful and friendly AI assistant.
 
 Use the conversation history to understand the user
 and answer follow-up questions.
 
-If the user tells you their name, remember it within
-the current conversation and use it when relevant.
+Use the saved user profile when it is relevant to the current request.
+Personalize explanations using relevant skills, goals, projects,
+language preferences, and response-style preferences.
+
+Do not assume facts that are not present in the profile.
+The user's current message takes priority over saved preferences.
+If the profile is irrelevant, answer normally.
 
 Answer in the same language as the user unless asked otherwise.
 Be clear, natural, and honest.
+
+Saved user profile:
+{memory_context}
 """
-        ),
-        *g_state.messages,
-    ]
+    ),
+    *g_state.messages,
+]
 
     response = llm.invoke(messages)
 
