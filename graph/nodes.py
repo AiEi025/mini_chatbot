@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel, Field
 
 from graph import state
 from graph.tools import CustomAgent, extract_tool_calls, make_rag_tool
@@ -30,9 +31,102 @@ py_collection = Path(__file__).resolve().parent.parent /'py_collection.json'
 VALIDAION_LLM = 'deepseek-v4-flash'
 GENERATE_LLM = 'deepseek-v4-flash'
 ROUTER_LLM = 'deepseek-v4-flash'
+
+class UserMemory(BaseModel):
+    facts: list[str] = Field(
+        description=(
+            "Stable and useful facts about the user, "
+            "their preferences, skills, and long-term goals."
+        )
+    )
+    
 mcp_tools, _ = asyncio.run(main())
-def router_node(g_state:state.Graph_state)->state.Graph_state:
+
+async def router_node(g_state:state.Graph_state,*,store)->dict:
     question = g_state.question
+    namespace = ("nexus", "user_profile")
+    saved_memory = await store.aget(
+        namespace,
+        "profile",
+    )
+    if saved_memory is not None:
+        old_facts = saved_memory.value.get("facts", [])
+    else:
+        old_facts = []
+        
+    memory_llm = (
+        Llm_model(
+            model_name=VALIDAION_LLM,
+            reasoning_effort="none",
+        )
+        .chose_model()
+        .with_structured_output(UserMemory , method='json_mode')
+    )
+    memory_prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            """
+            You maintain a long-term profile for an AI assistant.
+
+            Your task is to extract useful information from the user's new message.
+
+            Save only reasonably stable and useful facts, such as:
+            - Occupation and skills
+            - Language and response-style preferences
+            - Long-term goals and ongoing projects
+            - Name, if explicitly stated
+
+            Rules:
+            - Do not treat questions as facts about the user.
+            - Do not infer personal facts without evidence.
+            - Do not save temporary requests or entire code snippets.
+            - Existing facts are provided for context.
+            - Return ONLY genuinely new facts that are not already represented in the existing profile.
+            - Do not repeat existing facts.
+            - If the user explicitly corrects an existing fact, return the corrected fact.
+            - If there is no useful new information, return an empty list.
+
+            Return only a valid JSON object with exactly this structure:
+
+            {{
+              "facts": ["fact 1", "fact 2"]
+            }}
+
+            Do not include markdown, explanations, or any other keys.
+            """
+        ),
+        (
+            "human",
+            """
+            Existing user profile (JSON array of facts):
+            {old_facts}
+
+            New user message:
+            {question}
+            """
+        ),
+    ])
+    
+    memory_chain = memory_prompt | memory_llm
+    updated_memory = await memory_chain.ainvoke({
+        "old_facts": json.dumps(old_facts, ensure_ascii=False),
+        "question": question,
+    })
+    new_facts = updated_memory.facts
+    merged_facts = old_facts.copy()
+    for fact in new_facts:
+        normalized_fact = fact.strip()
+
+        if normalized_fact and normalized_fact not in merged_facts:
+            merged_facts.append(normalized_fact)
+    
+    if merged_facts != old_facts:
+        await store.aput(
+            namespace,
+            "profile",
+            {"facts": merged_facts},
+        )
+            
     llm = Llm_model(model_name=VALIDAION_LLM ,reasoning_effort='none').chose_model().with_structured_output(state.Router_state, method="json_mode")
     prompt = ChatPromptTemplate.from_messages([
         (
@@ -66,8 +160,16 @@ def router_node(g_state:state.Graph_state)->state.Graph_state:
         ("human", "{question}")
     ])
     chain = prompt | llm
-    result = chain.invoke({"question": question})    
-    return {'status':result["state"]}
+    result = await chain.ainvoke({"question": question})    
+    saved_memory = await store.aget(namespace, "profile")
+
+    memory_context = "\n".join(
+        f"- {fact}" for fact in merged_facts
+    )
+    return {
+        "status": result['state'],
+        "memory_context": memory_context,
+    }
 def route_decision(g_state:state.Graph_state)->str:
     status = g_state.status
     if status == 'tools':
@@ -158,7 +260,7 @@ def py_validation(g_state: state.Graph_state) -> state.Graph_state:
     file_path = g_state.file_path
     if not file_path:
         raise ValueError("file_path is missing")
-    result = PythonValidator(workspace_dir = workspace_dir/'python/').validate(file_path=file_path)
+    result = PythonValidator(workspace_dir = workspace_dir / g_state.thread_id / "python/").validate(file_path=file_path)
     retry = g_state.retry
     if retry.exhausted:
         validation = True
@@ -295,7 +397,7 @@ Do not include any text outside the structured output.
 """
 
 
-    llm = Llm_model(model_name=VALIDAION_LLM).chose_model().with_structured_output(state.Planning_state, method="json_schema")
+    llm = Llm_model(model_name=VALIDAION_LLM).chose_model().with_structured_output(state.Planning_state, method="json_mode")
     result = llm.invoke(prompt)
     retry = g_state.retry.exhausted
     if retry:

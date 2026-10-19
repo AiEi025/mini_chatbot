@@ -778,6 +778,7 @@ with input_col:
 # ============================================================
 # CHAT EXECUTION
 # ============================================================
+DEFAULT_CHAT_TITLE="گفتگوی جدید"
 
 if prompt:
     active_chat["messages"].append(
@@ -786,36 +787,37 @@ if prompt:
             "content": prompt,
         }
     )
-    title_prompt = f"""Based on the user's message, create a short, precise, and relevant title for this conversation.
-    Rules:
-    - The title must reflect the main topic of the message.
-    - Write the title in the same language as the user's message.
-    - Keep it to a maximum of 6 to 8 words.
-    - Provide only the title itself; no explanations, introductions, quotation marks, or extra symbols.
-    - If the message is a question, briefly state the subject of the question.
-    - Avoid generic titles like "New Conversation" or "Assisting the User."
+    if active_chat.get("title") == DEFAULT_CHAT_TITLE:
+        
+        title_prompt = f"""Based on the user's message, create a short, precise, and relevant title for this conversation.
+            Rules:
+            - The title must reflect the main topic of the message.
+            - Write the title in the same language as the user's message.
+            - Keep it to a maximum of 6 to 8 words.
+            - Provide only the title itself; no explanations, introductions, quotation marks, or extra symbols.
+            - If the message is a question, briefly state the subject of the question.
+            - Avoid generic titles like "New Conversation" or "Assisting the User."
 
-    User Message:
-    {prompt}
-    """
-    llm = Llm_model('openrouter').chose_model()
-    c_prompt = ChatPromptTemplate.from_template("{title_prompt}")
-    chain = c_prompt | llm
-    generated_title = chain.invoke({ "title_prompt": title_prompt }).content.strip()
+            User Message:
+            {prompt}
+            """
+        llm = Llm_model('openrouter').chose_model()
+        c_prompt = ChatPromptTemplate.from_template("{title_prompt}")
+        chain = c_prompt | llm
+        generated_title = chain.invoke({ "title_prompt": title_prompt }).content.strip()
     # عنوان چت از اولین پیام ساخته می‌شود.
     # این متد برای چت موجود نیز فراخوانی می‌شود؛
     # اما فقط اگر عنوان هنوز «گفتگوی جدید» باشد، تغییر می‌کند.
-    runner.run(
-        runner.create_chat(
-            thread_id=active_chat_id,
-            first_message=generated_title,
+        runner.run(
+            runner.create_chat(
+                thread_id=active_chat_id,
+                first_message=generated_title,
+            )
         )
-    )
 
-    active_chat["title"] = (
-        prompt.strip().replace("\n", " ")[:80]
-        or "گفتگوی جدید"
-    )
+        active_chat["title"] = (
+            generated_title.strip().replace("\n", " ")[:80]
+            or DEFAULT_CHAT_TITLE)
 
     with st.chat_message("user"):
         st.markdown(prompt)

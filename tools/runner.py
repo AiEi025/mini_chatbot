@@ -6,6 +6,7 @@ import threading
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.store.postgres.aio import AsyncPostgresStore
 from psycopg import AsyncConnection
 from psycopg.conninfo import make_conninfo
 from psycopg.rows import dict_row
@@ -25,6 +26,8 @@ class AsyncRunner:
 
         self.connection = None
         self.checkpointer = None
+        self.store_connection = None
+        self.store = None
         self.graph = None
 
         self.thread = threading.Thread(
@@ -71,9 +74,16 @@ class AsyncRunner:
 
         # جدول‌های داخلی LangGraph
         await self.checkpointer.setup()
-
+        self.store_connection = await AsyncConnection.connect(
+        conninfo,
+        autocommit=True,
+        prepare_threshold=0,
+        row_factory=dict_row,
+        )
+        self.store = AsyncPostgresStore(self.store_connection)
+        await self.store.setup()
         # ساخت گراف با Checkpointer
-        self.graph = build_graph(self.checkpointer)
+        self.graph = build_graph(checkpointer=self.checkpointer , store=self.store)
 
         # جدول مدیریت چت‌ها
         await self._create_chat_sessions_table()

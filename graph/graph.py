@@ -5,13 +5,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
-from langgraph.store.memory import InMemoryStore
 
+# from langgraph.store.memory import InMemoryStore
 import graph.nodes as node
 from graph import state
 
 # checkpointer = MemorySaver()
-store = InMemoryStore()
+# store = InMemoryStore()
 
 builder = StateGraph(state.Graph_state)
 
@@ -45,7 +45,7 @@ builder.add_conditional_edges('plan_validate', node.cond_planning, {'end': END, 
 builder.add_conditional_edges('tools_validate', node.cond_tools,  {'end': END, 'tools_node': 'tools'})
 
 # graph = builder.compile(checkpointer=checkpointer , store=store)
-def build_graph(checkpointer):
+def build_graph(checkpointer, store):
     graph=builder.compile(
         checkpointer=checkpointer,
         store=store

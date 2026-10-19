@@ -44,3 +44,4 @@ class Graph_state(BaseModel):
 
     file_path: str | None = None
     thread_id:str | None = None 
+    memory_context: str = ""
